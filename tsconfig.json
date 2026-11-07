@@ -3,6 +3,8 @@
     "module": "commonjs",
     "target": "ES2022",
     "lib": ["ES2022"],
+    // TypeScript 6 から @types/* は自動で読み込まれないので、使うものを書く
+    "types": ["node", "mocha", "vscode"],
     "outDir": "out",
     "rootDir": "src",
     "sourceMap": true,
