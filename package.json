@@ -21,6 +21,10 @@
     "Other"
   ],
   "main": "./out/extension.js",
+  "extensionKind": [
+    "workspace",
+    "ui"
+  ],
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": false

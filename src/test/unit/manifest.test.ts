@@ -22,6 +22,7 @@ interface Manifest {
   main: string;
   engines: { vscode: string };
   capabilities: { untrustedWorkspaces: { supported: boolean } };
+  extensionKind?: string[];
   contributes: {
     commands: { command: string; title: string; category?: string }[];
     menus: Record<string, MenuItem[]>;
@@ -105,6 +106,10 @@ describe('メニューの表示条件', () => {
 
   it('制限モード（信頼していないワークスペース）では動かない', () => {
     assert.equal(pkg.capabilities.untrustedWorkspaces.supported, false);
+  });
+
+  it('Remote（WSL・SSH など）では、リモート側でも手元の PC 側でも動ける', () => {
+    assert.deepEqual(pkg.extensionKind, ['workspace', 'ui']);
   });
 
   it('右クリックメニューはすべてターミナル版の設定では出さない', () => {

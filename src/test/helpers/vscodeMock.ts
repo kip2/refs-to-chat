@@ -324,6 +324,9 @@ export function loadExtension(vscode: VscodeMock): Extension {
 export function setup(opts?: MockOptions) {
   const { vscode, state } = createVscodeMock(opts);
   const ext = loadExtension(vscode);
+  // 貼り付け前の待ち時間はテストでは待たない
+  // 拡張は呼ぶたびに constants から読むので、読み込んだあとに書き換えれば効く
+  (require(path.join(OUT_DIR, 'constants.js')) as { FOCUS_WAIT_MS: number }).FOCUS_WAIT_MS = 0;
   const context = { subscriptions: [] as { dispose(): unknown }[] };
   ext.activate(context as never);
   const run = (id: string, ...args: unknown[]) => {

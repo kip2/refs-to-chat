@@ -2,7 +2,7 @@
 
 import * as assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
-import { CLAUDE, PASTE_COMMAND } from '../../constants';
+import { CLAUDE, FOCUS_WAIT_MS, PASTE_COMMAND } from '../../constants';
 import { MESSAGES, REASON_MESSAGES as R } from '../../messages';
 import { makeEditor, makeSelection, setup, uri } from '../helpers/vscodeMock';
 
@@ -45,6 +45,10 @@ describe('activate / deactivate', () => {
     assert.equal(CLAUDE.focusInputCommand, FOCUS);
     assert.equal(CLAUDE.extensionId, 'anthropic.claude-code');
     assert.equal(PASTE_COMMAND, PASTE);
+  });
+
+  it('貼り付け前の待ち時間は、待たされても気にならない 1 秒未満', () => {
+    assert.ok(FOCUS_WAIT_MS > 0 && FOCUS_WAIT_MS < 1000, `${FOCUS_WAIT_MS}ms`);
   });
 
   it('extension.ts が公開するのは activate と deactivate だけ', () => {

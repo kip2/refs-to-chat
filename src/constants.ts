@@ -28,7 +28,11 @@ export const CLAUDE = {
 /** VS Code 標準の貼り付け */
 export const PASTE_COMMAND = 'editor.action.clipboardPasteAction';
 
-/** チャットの入力欄にフォーカスが移るまで待つ時間（ミリ秒） */
-export const FOCUS_WAIT_MS = 150;
+/**
+ * チャットの入力欄にフォーカスが移るまで待つ時間（ミリ秒）
+ * 短いと、移りきる前の場所（エディタなど）に貼り付けてしまう
+ * 待たされても気にならない 1 秒未満で、なるべく長くしている
+ */
+export const FOCUS_WAIT_MS = 800;
 
 export const LOG_PREFIX = '[right-click-mention]';
