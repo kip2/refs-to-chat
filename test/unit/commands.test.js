@@ -4,6 +4,7 @@
 const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const { setup, makeEditor, makeSelection, uri } = require('../helpers/vscode-mock');
+const { CLAUDE, PASTE_COMMAND } = require('../../out/constants');
 
 const CMD = 'claude-vscode.insertAtMention';
 const FOCUS = 'claude-vscode.focus';
@@ -34,9 +35,15 @@ describe('activate / deactivate', () => {
   });
 
   it('公式コマンドIDと拡張IDが想定どおり', () => {
+    assert.equal(CLAUDE.insertMentionCommand, CMD);
+    assert.equal(CLAUDE.focusInputCommand, FOCUS);
+    assert.equal(CLAUDE.extensionId, 'anthropic.claude-code');
+    assert.equal(PASTE_COMMAND, PASTE);
+  });
+
+  it('extension.js が公開するのは activate と deactivate だけ', () => {
     const { ext } = setup();
-    assert.equal(ext._internal.CLAUDE_CMD, CMD);
-    assert.equal(ext._internal.CLAUDE_EXT_ID, 'anthropic.claude-code');
+    assert.deepEqual(Object.keys(ext).filter((k) => k !== '__esModule').sort(), ['activate', 'deactivate']);
   });
 });
 

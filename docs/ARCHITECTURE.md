@@ -22,13 +22,12 @@ flowchart LR
       M3["エクスプローラー: ファイル・フォルダ<br/>Claudeのチャットに追加"]
     end
 
-    subgraph Ext["この拡張（src/extension.ts）"]
-      SAE["sendActiveEditor()"]
-      SF["sendFiles(clicked, selected)"]
-      IM["insertMention(editor)"]
-      STC["sendToClaude()"]
-      PST["pasteIntoClaude()"]
-      FB["copyReferences()<br/>buildReference() / buildFolderReference()"]
+    subgraph Ext["この拡張（src/）"]
+      SAE["commands.ts<br/>addActiveEditorToChat()"]
+      SF["commands.ts<br/>addExplorerItemsToChat()"]
+      STC["claudeChat.ts<br/>insertActiveEditorMention()"]
+      PST["fallback.ts → claudeChat.ts<br/>pasteReferencesIntoChat()"]
+      FB["fallback.ts<br/>copyReferencesWithWarning()"]
     end
 
     subgraph Claude["公式 Claude Code 拡張"]
@@ -44,8 +43,7 @@ flowchart LR
   M1 --> SAE
   M2 --> SAE
   M3 --> SF
-  SAE --> IM
-  IM --> STC
+  SAE --> STC
   SF -->|ファイルを開いて| STC
   STC --> C1
   C1 --> P
@@ -54,7 +52,7 @@ flowchart LR
   C2 --> P
   PST --> PASTE
   PASTE -->|クリップボードの中身| P
-  IM -.->|拡張が無い / 失敗| FB
+  SAE -.->|拡張が無い / 失敗| FB
   SF -.->|拡張が無い / 失敗 / 貼り付けを呼べない<br/>（まとめて 1 回）| FB
   FB -.-> CB
 ```
@@ -73,14 +71,14 @@ flowchart LR
 | ファイル | 役割 |
 |---|---|
 | `package.json` | 拡張のマニフェスト。コマンド3つと右クリックメニューを宣言 |
-| `src/extension.ts` | 本体。コマンドの登録と処理。テスト用に `_internal` で内部関数も公開 |
+| `src/` | 本体（→ 4章）。役目ごとにファイルを分けている |
 | `out/` | `src/` のコンパイル結果。`package.json` の `main` はここを指す。git には入れない |
 | `tsconfig.json` | TypeScript の設定（`strict` で型を厳しくチェック） |
 | `.vscode/launch.json` / `tasks.json` | `F5` でコンパイルしてから拡張開発ホストを起動する設定 |
 | `README.md` | 使い方（GitHub のトップに表示される） |
 | `docs/ARCHITECTURE.md` | このファイル |
 | `LICENSE` | MIT ライセンス |
-| `.vscodeignore` | vsix に入れないファイルの指定（`src/`・`docs/`・`test/` など。vsix に入るのは `out/extension.js`・`package.json`・README・LICENSE） |
+| `.vscodeignore` | vsix に入れないファイルの指定（`src/`・`docs/`・`test/` など。vsix に入るのは `out/*.js`・`package.json`・README・LICENSE） |
 | `.gitignore` | git に入れないファイルの指定（`node_modules/`・`out/`・`*.vsix` など） |
 | `.github/workflows/release.yml` | タグを push すると、テスト → vsix 作成 → Releases に添付（→ 9章） |
 | `.github/dependabot.yml` | Action と devDependencies の更新を PR で知らせる |
@@ -117,22 +115,41 @@ flowchart TB
 
 ---
 
-## 4. src/extension.ts の関数
+## 4. src/ の構成
 
-| 関数 | 役割 |
+役目ごとにファイルを分けている。状態を持たない処理を順に呼ぶだけなので、クラスは使わず関数で書いている（状態を持つ必要が出たら、その部分だけクラスにする）。
+
+```mermaid
+flowchart TD
+  EXT["extension.ts<br/>コマンドの登録"] --> CMD["commands.ts<br/>2 つのコマンドの処理"]
+  EXT --> CONST["constants.ts<br/>定数"]
+  CMD --> CHAT["claudeChat.ts<br/>公式拡張とのやり取り"]
+  CMD --> FB["fallback.ts<br/>貼り付け・コピー"]
+  CMD --> WS["workspace.ts<br/>パス・フォルダ判定・ファイルを開く"]
+  CMD --> REF["reference.ts<br/>参照の文字列"]
+  FB --> CHAT
+  FB --> REF
+  CHAT --> CONST
+  WS --> CONST
+```
+
+`constants.ts` と `reference.ts` は vscode に依存しないので、テストからモックなしで直接読み込める。`extension.ts` が外に出すのは `activate` と `deactivate` だけ。
+
+| ファイル | 中身 |
 |---|---|
-| `activate(context)` | 3つのコマンドを登録（`sendSelection` と `sendCurrentFile` は同じ処理） |
-| `sendActiveEditor()` | エディタからの右クリック。アクティブなエディタを `insertMention` に渡す |
-| `sendFiles(clicked, selected)` | エクスプローラーからの右クリック。複数選択に対応。ファイルは開いて選択を空にしてから `sendToClaude`。フォルダ・開けないファイルは最後にまとめて `pasteIntoClaude` で貼り付ける。送れなかったものは `copyReferences` でまとめてコピー |
-| `pasteIntoClaude()` | `claude-vscode.focus` で入力欄にフォーカス → 少し待つ → `editor.action.clipboardPasteAction`。呼べたら `true`（本当に入ったかは確かめられない） |
-| `hasClaude()` | 公式拡張がインストールされているか |
-| `insertMention(editor)` | `sendToClaude` で送り、送れなかったら `copyReferences` でコピー |
-| `sendToClaude()` | 公式拡張の有無を確認 → 公式コマンドを実行。送れなかった理由を返す（送れたら `undefined`） |
-| `copyReferences(refs, reasons)` | 参照を空白でつないで 1 回だけクリップボードにコピーし、理由をまとめた警告を 1 回出す |
-| `isFolder(uri)` | `workspace.fs.stat` でフォルダかどうかを調べる |
-| `buildReference(editor)` | `@path`, `@path#8`, `@path#5-10` を作る |
-| `buildFolderReference(uri)` | フォルダの参照 `@path/` を作る（末尾の `/` でファイルと区別） |
-| `relPath(uri)` | `asRelativePath` で公式と同じ形式のパスにする |
+| `extension.ts` | `activate(context)`: 3 つのコマンドを登録（`sendSelection` と `sendCurrentFile` は同じ処理）。`deactivate()` |
+| `commands.ts` | `addActiveEditorToChat()`: エディタの右クリック。公式コマンドで入れ、入れられなければコピー<br/>`addExplorerItemsToChat(clicked, selected)`: エクスプローラーの右クリック。ファイルは開いて公式コマンドで入れる。入れられなかったもの（フォルダ・開けないファイル・失敗）は理由と一緒に後回しにし、最後にまとめて貼り付けかコピー |
+| `claudeChat.ts` | `isClaudeInstalled()`<br/>`insertActiveEditorMention()`: 公式コマンドを呼ぶ。入れられなかった理由（`notInstalled` / `failed`）を返す<br/>`pasteClipboardIntoChat()`: `claude-vscode.focus` → 少し待つ → 標準の貼り付け |
+| `fallback.ts` | `FallbackReason`（理由の種類）と、その表示文<br/>`canPaste(reason)`: 貼り付けで入れられる理由か（フォルダ・開けないファイル）<br/>`pasteReferencesIntoChat(refs)`: コピーして貼り付け、お知らせ 1 回<br/>`copyReferencesWithWarning(refs, reasons)`: コピーして、理由をまとめた警告 1 回 |
+| `workspace.ts` | `workspacePath(uri)`: 公式と同じ形式のパス<br/>`isFolder(uri)`: `workspace.fs.stat` で判定<br/>`openAsActiveEditor(uri)`: 選択なしで開いてアクティブにする。開けなければ `undefined` |
+| `reference.ts` | `fileReference(path, selection?)`: `@path` / `@path#8` / `@path#5-10`<br/>`folderReference(path)`: `@path/`<br/>`joinReferences(refs)`: 空白でつなぐ |
+| `constants.ts` | `COMMANDS`（この拡張のコマンド ID）、`CLAUDE`（公式拡張の ID とコマンド）、`PASTE_COMMAND`、`FOCUS_WAIT_MS`、`LOG_PREFIX` |
+
+機能を足すときの置き場所の目安:
+
+- 新しい右クリックメニュー → `package.json` に宣言、`constants.ts` に ID、`commands.ts` に処理、`extension.ts` で登録
+- 公式拡張の別のコマンドを使う → `constants.ts` の `CLAUDE` と `claudeChat.ts`
+- 参照の形式を変える・増やす → `reference.ts`（テストはモックなしで書ける）
 
 ---
 
@@ -175,7 +192,7 @@ sequenceDiagram
     else ファイル
       E->>VS: openTextDocument + showTextDocument（選択は 0,0 で空）
       alt テキストとして開けた
-        E->>C: sendToClaude → 公式コマンド
+        E->>C: insertActiveEditorMention → 公式コマンド
         C-->>U: @path がチャットに入る
         Note over E,C: 公式拡張が無い・失敗したら @path を後回しリストに追加
       else 画像などで開けない
@@ -199,8 +216,8 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-  S([sendToClaude]) --> Q1{公式拡張<br/>anthropic.claude-code<br/>がある？}
-  Q1 -- いいえ --> F[理由を返す → copyReferences<br/>参照をクリップボードへ]
+  S([insertActiveEditorMention]) --> Q1{公式拡張<br/>anthropic.claude-code<br/>がある？}
+  Q1 -- いいえ --> F[理由を返す → copyReferencesWithWarning<br/>参照をクリップボードへ]
   Q1 -- はい --> P[claude-vscode.insertAtMention]
   P --> Q3{例外が出た？}
   Q3 -- はい --> F
@@ -230,7 +247,7 @@ flowchart TD
 ## 7. 設計上の判断
 
 - **公式コマンドに委ねる**: 参照の形式やチャットへの挿入方法を公式と完全に一致させられ、コードも短い。
-- **公式拡張のコマンドに依存する**: 公式拡張の更新でコマンド名が変わると動かなくなる。その場合は `src/extension.ts` 冒頭の `CLAUDE_CMD` を書き換える（キーボードショートカット画面で「Insert @-Mention」を検索 → 右クリック →「コマンドIDをコピー」）。
+- **公式拡張のコマンドに依存する**: 公式拡張の更新でコマンド名が変わると動かなくなる。その場合は `src/constants.ts` の `CLAUDE` を書き換える（キーボードショートカット画面で「Insert @-Mention」を検索 → 右クリック →「コマンドIDをコピー」）。
 - **失敗しても無駄にしない**: 送れない時はクリップボードにコピーし、手で貼れるようにしている。
 - **フォルダは貼り付けで入れる**: 公式コマンドはファイルしか扱えないため、公開されている `claude-vscode.focus` と VS Code 標準の貼り付けを組み合わせる。公式拡張の中身は使わない。欠点は、クリップボードの中身を上書きすることと、本当に入ったかを確かめられないこと（お知らせに「入っていなければ Ctrl+V」と書いている）。フォーカスが移るまでの待ち時間は `FOCUS_WAIT_MS`（150ms）。手動で動くことを確認した。
 
@@ -282,18 +299,20 @@ npm run package   # = vsce package。直前に vscode:prepublish でコンパイ
 flowchart LR
   subgraph Unit["ユニットテスト（npm test・数百ms）"]
     M["test/helpers/vscode-mock.js<br/>VS Code APIのモック<br/>呼び出しを記録"]
-    U1["buildReference.test.js<br/>行番号・パス形式"]
-    U2["commands.test.js<br/>登録・送信・フォールバック"]
+    U0["reference.test.js<br/>参照の文字列（モックなし）"]
+    U1["workspacePath.test.js<br/>パス形式"]
+    U2["commands.test.js<br/>登録・送信・貼り付け・コピー"]
     U3["manifest.test.js<br/>package.json の整合性<br/>公式拡張との互換性"]
     M --> U1 & U2 & U3
   end
+  U0 --> REF["out/reference.js"]
   subgraph Int["統合テスト（npm run test:integration）"]
     R["runTest.js<br/>テスト用VS Codeを起動"]
     W["fixtures/multi-root<br/>alpha / beta"]
     I["suite/extension.itest.js<br/>実APIで確認"]
     R --> W --> I
   end
-  EXT["out/extension.js<br/>（src/extension.ts をコンパイル）"]
+  EXT["out/extension.js<br/>（src/ をコンパイル）"]
   U1 & U2 --> EXT
   I --> EXT
   U3 -.->|~/.vscode/extensions の<br/>公式 package.json| CL["公式Claude拡張"]
@@ -303,10 +322,11 @@ flowchart LR
 
 | ファイル | 内容 | 件数 |
 |---|---|---|
-| `test/helpers/vscode-mock.js` | VS Code API のモック。`asRelativePath` のマルチルート挙動、`Selection` の正規化、バイナリで開けないファイルなどを再現。`setup()` でモック＋拡張＋activate を一度に用意 | — |
-| `test/unit/buildReference.test.js` | 行番号（1行・複数行・次行先頭で終わる・逆方向選択）、パス形式（単一・マルチルート・別の場所・入れ子・ワークスペース外） | 15 |
-| `test/unit/commands.test.js` | コマンド登録と dispose、送信の分岐（成功・拡張なし・例外・reject）、エクスプローラー（単一・複数・空・引数なし・バイナリ混在・フォルダの貼り付け・貼り付け失敗・拡張なし・ファイルとフォルダの混在・コピーと警告を 1 回にまとめる） | 27 |
-| `test/unit/manifest.test.js` | package.json の基本項目、宣言とコードの一致、メニューの `when` 条件、制限モードの宣言、公式拡張にコマンドが存在するか | 15 |
+| `test/helpers/vscode-mock.js` | VS Code API のモック。`asRelativePath` のマルチルート挙動、`Selection` の正規化、バイナリで開けないファイルなどを再現。`setup()` でモック＋拡張＋activate を一度に用意（`out/` のファイルは毎回読み込み直す） | — |
+| `test/unit/reference.test.js` | 行番号（1行・複数行・次行先頭で終わる・逆方向選択）、フォルダの `/`、空白でつなぐ。`out/reference.js` をモックなしで直接読む | 12 |
+| `test/unit/workspacePath.test.js` | パス形式（単一・マルチルート・別の場所・入れ子・ワークスペース外）。コマンドを実行し、コピーされた参照で確かめる | 6 |
+| `test/unit/commands.test.js` | コマンド登録と dispose、`extension.js` が activate / deactivate だけを出すこと、送信の分岐（成功・拡張なし・例外・reject）、エクスプローラー（単一・複数・空・引数なし・バイナリ混在・フォルダの貼り付け・貼り付け失敗・拡張なし・ファイルとフォルダの混在・コピーと警告を 1 回にまとめる） | 28 |
+| `test/unit/manifest.test.js` | package.json の基本項目と category、宣言とコード（`COMMANDS`）の一致、メニューの `when` 条件、制限モードの宣言、公式拡張にコマンドが存在するか | 17 |
 | `test/run-unit.js` | ユニットテストの実行スクリプト（Windows / 古いNodeでも動くようにファイルを列挙） | — |
 | `test/integration/runTest.js` | `@vscode/test-electron` でテスト用VS Codeを起動（他の拡張は無効） | — |
 | `test/integration/suite/extension.itest.js` | 実VS Code上でマルチルートのパス、選択の扱い、エクスプローラー送信、バイナリファイル、フォルダの判定、ファイルとフォルダの混在 | 16 |
@@ -323,8 +343,8 @@ npm run test:integration    # コンパイル → 統合テスト（初回はテ
 
 ### ポイント
 
-- **テストは JavaScript のまま**: テストはコンパイル後の `out/extension.js` を読む。そのため `npm test` などは、先に `npm run compile` を自動で実行する（`pretest`）。ユニットテスト自体は Node 標準の `node:test` を使い、テスト用のライブラリは要らない。
-- **公式拡張の更新を検知**: `manifest.test.js` は `~/.vscode/extensions/anthropic.claude-code-*` の package.json を読み、呼んでいる `claude-vscode.insertAtMention` がまだ存在するかを確認する。公式拡張を更新した後に `npm test` を流せば、コマンド名の変更に気づける。見つからない環境ではスキップ（`CLAUDE_EXT_DIR` で場所を指定可能）。
+- **テストは JavaScript のまま**: テストはコンパイル後の `out/` を読む（`extension.js` はモック経由、`reference.js`・`constants.js` は直接）。テストのためだけの公開（以前の `_internal`）はない。そのため `npm test` などは、先に `npm run compile` を自動で実行する（`pretest`）。ユニットテスト自体は Node 標準の `node:test` を使い、テスト用のライブラリは要らない。
+- **公式拡張の更新を検知**: `manifest.test.js` は `~/.vscode/extensions/anthropic.claude-code-*` の package.json を読み、呼んでいる `claude-vscode.insertAtMention` と `claude-vscode.focus` がまだ存在するかを確認する。公式拡張を更新した後に `npm test` を流せば、コマンド名の変更に気づける。見つからない環境ではスキップ（`CLAUDE_EXT_DIR` で場所を指定可能）。
 - **統合テストは公式拡張なし**: テスト用VS Codeでは他の拡張を無効にするため、送信結果はクリップボードで確認する（フォールバック経路）。公式拡張のチャット欄に入るところは自動テストできないので、手動で確認する。
-- **テストの効き目を確認済み**: わざとバグを入れて（行番号の0始まり、コマンドID誤り、例外の握りつぶし、選択リセット削除、複数選択の無視、フォルダ名の欠落、メニュー条件の欠落 など9種類）すべて検出できることを確認した。
+- **テストの効き目を確認済み**: わざとバグを入れて（行番号の0始まり、コマンドID誤り、例外の握りつぶし、選択リセット削除、複数選択の無視、フォルダ名の欠落、メニュー条件の欠落 など9種類）すべて検出できることを確認した。ファイルを分けたあとにも、8 種類（行番号の0始まり、行末まで選んだときの行、フォルダの判定、フォルダの貼り付け、参照のつなぎ方、公式コマンドの失敗の握りつぶし、エクスプローラーでの失敗の無視、選択のリセット）で同じことを確かめた。
 

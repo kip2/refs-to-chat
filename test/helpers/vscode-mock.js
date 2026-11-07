@@ -130,17 +130,24 @@ function createVscodeMock(opts = {}) {
   return { vscode, state };
 }
 
-const EXT_PATH = path.resolve(__dirname, '../../out/extension.js');
+const OUT_DIR = path.resolve(__dirname, '../../out');
+const EXT_PATH = path.join(OUT_DIR, 'extension.js');
 
-/** モックを差し込んで out/extension.js を毎回まっさらに読み込む */
+/**
+ * モックを差し込んで out/extension.js を毎回まっさらに読み込む。
+ * extension.js が読み込む out/ の他のファイル（commands.js など）も 'vscode' を読み込むので、
+ * テストごとに別のモックを使えるよう、out/ のファイルはすべてキャッシュから外す。
+ */
 function loadExtension(vscode) {
+  for (const key of Object.keys(require.cache)) {
+    if (key.startsWith(OUT_DIR + path.sep)) delete require.cache[key];
+  }
   const origLoad = Module._load;
   Module._load = function (request, ...rest) {
     if (request === 'vscode') return vscode;
     return origLoad.call(this, request, ...rest);
   };
   try {
-    delete require.cache[EXT_PATH];
     return require(EXT_PATH);
   } finally {
     Module._load = origLoad;

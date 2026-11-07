@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { setup } = require('../helpers/vscode-mock');
+const { COMMANDS, CLAUDE } = require('../../out/constants');
 
 const ROOT = path.resolve(__dirname, '../..');
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
@@ -42,6 +43,10 @@ describe('宣言とコードの一致', () => {
   it('宣言したコマンド = activate で登録するコマンド', () => {
     const { state } = setup();
     assert.deepEqual([...state.registered.keys()].sort(), [...declared].sort());
+  });
+
+  it('宣言したコマンド = constants.ts の COMMANDS', () => {
+    assert.deepEqual(Object.values(COMMANDS).sort(), [...declared].sort());
   });
 
   it('メニューが参照するコマンドはすべて宣言済み', () => {
@@ -115,12 +120,12 @@ describe('公式 Claude Code 拡張との互換性', () => {
 
   it('呼び出すコマンドが公式拡張に存在する', { skip: !dir && '公式拡張が見つからないためスキップ' }, () => {
     const claude = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
-    const { ext } = setup();
     const ids = claude.contributes.commands.map((c) => c.command);
-    assert.ok(ids.includes(ext._internal.CLAUDE_CMD), `${ext._internal.CLAUDE_CMD} が ${dir} に無い`);
-    assert.ok(ids.includes(ext._internal.CLAUDE_FOCUS_CMD), `${ext._internal.CLAUDE_FOCUS_CMD} が ${dir} に無い`);
+    for (const cmd of [CLAUDE.insertMentionCommand, CLAUDE.focusInputCommand]) {
+      assert.ok(ids.includes(cmd), `${cmd} が ${dir} に無い`);
+    }
     // 拡張IDは大文字小文字を区別しない（公式は publisher が "Anthropic"）
-    assert.equal(`${claude.publisher}.${claude.name}`.toLowerCase(), ext._internal.CLAUDE_EXT_ID.toLowerCase());
+    assert.equal(`${claude.publisher}.${claude.name}`.toLowerCase(), CLAUDE.extensionId.toLowerCase());
   });
 
   it('公式拡張のパレット表示条件がこの拡張と同じ（ターミナル版で無効）', { skip: !dir && '公式拡張が見つからないためスキップ' }, () => {
