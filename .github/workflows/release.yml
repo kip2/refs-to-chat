@@ -1,6 +1,6 @@
 # vsix を作って配る
 # - タグ v* を push したとき: テスト → vsix を作る → GitHub の Releases に添付
-# - Actions 画面からブランチを選んで手動で実行したとき: テスト → vsix を作る → Actions の成果物（Artifacts）に置くだけ
+# - ブランチを選んで手動で実行: テスト → vsix を作る → Actions の成果物に置くだけ
 #
 # 安全のため、依存を入れてビルドするジョブ（package）は読み取り権限だけで動かす。
 # Releases に書き込むジョブ（release）は依存を入れず、作った vsix を受け取って添付するだけにする。
@@ -66,8 +66,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # Releases の作成に必要
-      id-token: write # 出どころの証明（attestation）に署名するため
-      attestations: write # 出どころの証明を保存するため
+      id-token: write # attestation の署名用
+      attestations: write # attestation の保存用
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:

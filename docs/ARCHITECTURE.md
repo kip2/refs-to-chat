@@ -26,8 +26,8 @@ flowchart LR
       SAE["commands.ts<br/>addActiveEditorToChat()"]
       SF["commands.ts<br/>addExplorerItemsToChat()"]
       STC["claudeChat.ts<br/>insertActiveEditorMention()"]
-      PST["fallback.ts → claudeChat.ts<br/>pasteReferencesIntoChat()"]
-      FB["fallback.ts<br/>copyReferencesWithWarning()"]
+      PST["fallback.ts → claudeChat.ts<br/>deliverDeferredReferences()<br/>（貼り付け）"]
+      FB["fallback.ts<br/>deliverDeferredReferences()<br/>（コピー + 警告）"]
     end
 
     subgraph Claude["公式 Claude Code 拡張"]
@@ -138,18 +138,32 @@ flowchart TD
 | ファイル | 中身 |
 |---|---|
 | `extension.ts` | `activate(context)`: 3 つのコマンドを登録（`sendSelection` と `sendCurrentFile` は同じ処理）。`deactivate()` |
-| `commands.ts` | `addActiveEditorToChat()`: エディタの右クリック。公式コマンドで入れ、入れられなければコピー<br/>`addExplorerItemsToChat(clicked, selected)`: エクスプローラーの右クリック。ファイルは開いて公式コマンドで入れる。入れられなかったもの（フォルダ・開けないファイル・失敗）は理由と一緒に後回しにし、最後にまとめて貼り付けかコピー |
+| `commands.ts` | `addActiveEditorToChat()`: エディタの右クリック。公式コマンドで入れ、入れられなければ `deliverDeferredReferences` に渡す<br/>`addExplorerItemsToChat(clicked, selected)`: エクスプローラーの右クリック。ファイルは開いて公式コマンドで入れる。入れられなかったもの（フォルダ・開けないファイル・失敗）は `{ ref, reason }` として後回しにし、最後にまとめて `deliverDeferredReferences` に渡す |
 | `claudeChat.ts` | `isClaudeInstalled()`<br/>`insertActiveEditorMention()`: 公式コマンドを呼ぶ。入れられなかった理由（`notInstalled` / `failed`）を返す<br/>`pasteClipboardIntoChat()`: `claude-vscode.focus` → 少し待つ → 標準の貼り付け |
-| `fallback.ts` | `FallbackReason`（理由の種類）と、その表示文<br/>`canPaste(reason)`: 貼り付けで入れられる理由か（フォルダ・開けないファイル）<br/>`pasteReferencesIntoChat(refs)`: コピーして貼り付け、お知らせ 1 回<br/>`copyReferencesWithWarning(refs, reasons)`: コピーして、理由をまとめた警告 1 回 |
-| `workspace.ts` | `workspacePath(uri)`: 公式と同じ形式のパス<br/>`isFolder(uri)`: `workspace.fs.stat` で判定<br/>`openAsActiveEditor(uri)`: 選択なしで開いてアクティブにする。開けなければ `undefined` |
+| `fallback.ts` | `FallbackReason`（理由の種類）と表示文、`DeferredReference`（`{ ref, reason }`）<br/>`deliverDeferredReferences(deferred)`: 貼り付けるかコピーするかをここだけで決める。公式拡張があり、理由がフォルダ・開けないファイルだけなら貼り付け（お知らせ 1 回）。それ以外はコピー（警告 1 回）。公式拡張が無ければ、その理由も警告に足す |
+| `workspace.ts` | `workspacePath(uri)`: 公式と同じ形式のパス<br/>`isFolder(uri)`: `workspace.fs.stat` で判定（シンボリックリンクのフォルダも含む。調べられなければファイル扱い）<br/>`openAsActiveEditor(uri)`: 選択なしで開いてアクティブにする。開けない・表示できなければ `undefined` |
 | `reference.ts` | `fileReference(path, selection?)`: `@path` / `@path#8` / `@path#5-10`<br/>`folderReference(path)`: `@path/`<br/>`joinReferences(refs)`: 空白でつなぐ |
 | `constants.ts` | `COMMANDS`（この拡張のコマンド ID）、`CLAUDE`（公式拡張の ID とコマンド）、`PASTE_COMMAND`、`FOCUS_WAIT_MS`、`LOG_PREFIX` |
+
+名前に使う動詞の使い分け:
+
+| 動詞 | 意味 | 例 |
+| --- | --- | --- |
+| add | この拡張のコマンド（ユーザーから見た「チャットに追加」） | `addExplorerItemsToChat` |
+| insert | 公式コマンドでチャットに入れる | `insertActiveEditorMention` |
+| paste | クリップボードからチャットに貼り付ける | `pasteClipboardIntoChat` |
+| deliver | 後回しにした参照を、貼り付けかコピーで届ける | `deliverDeferredReferences` |
+
+`COMMANDS` のキーが `sendXxx` なのは、公開済みのコマンド ID（`rightClickMention.sendSelection` など）に合わせているため。
 
 機能を足すときの置き場所の目安:
 
 - 新しい右クリックメニュー → `package.json` に宣言、`constants.ts` に ID、`commands.ts` に処理、`extension.ts` で登録
 - 公式拡張の別のコマンドを使う → `constants.ts` の `CLAUDE` と `claudeChat.ts`
 - 参照の形式を変える・増やす → `reference.ts`（テストはモックなしで書ける）
+- 貼り付けるかコピーするかの条件を変える（自動の貼り付けを切る設定など） → `fallback.ts` の `deliverDeferredReferences` だけ
+- 設定を足す → `package.json` の `contributes.configuration` に宣言し、読む処理を使う側のファイルに置く
+- ターミナル版にも対応する → `claudeChat.ts` で分岐し、`package.json` の `when` から `!config.claudeCode.useTerminal` を外す
 
 ---
 
@@ -217,7 +231,7 @@ sequenceDiagram
 ```mermaid
 flowchart TD
   S([insertActiveEditorMention]) --> Q1{公式拡張<br/>anthropic.claude-code<br/>がある？}
-  Q1 -- いいえ --> F[理由を返す → copyReferencesWithWarning<br/>参照をクリップボードへ]
+  Q1 -- いいえ --> F[理由を返す → deliverDeferredReferences<br/>参照をクリップボードへ]
   Q1 -- はい --> P[claude-vscode.insertAtMention]
   P --> Q3{例外が出た？}
   Q3 -- はい --> F
@@ -325,7 +339,7 @@ flowchart LR
 | `test/helpers/vscode-mock.js` | VS Code API のモック。`asRelativePath` のマルチルート挙動、`Selection` の正規化、バイナリで開けないファイルなどを再現。`setup()` でモック＋拡張＋activate を一度に用意（`out/` のファイルは毎回読み込み直す） | — |
 | `test/unit/reference.test.js` | 行番号（1行・複数行・次行先頭で終わる・逆方向選択）、フォルダの `/`、空白でつなぐ。`out/reference.js` をモックなしで直接読む | 12 |
 | `test/unit/workspacePath.test.js` | パス形式（単一・マルチルート・別の場所・入れ子・ワークスペース外）。コマンドを実行し、コピーされた参照で確かめる | 6 |
-| `test/unit/commands.test.js` | コマンド登録と dispose、`extension.js` が activate / deactivate だけを出すこと、送信の分岐（成功・拡張なし・例外・reject）、エクスプローラー（単一・複数・空・引数なし・バイナリ混在・フォルダの貼り付け・貼り付け失敗・拡張なし・ファイルとフォルダの混在・コピーと警告を 1 回にまとめる） | 28 |
+| `test/unit/commands.test.js` | コマンド登録と dispose、`extension.js` が activate / deactivate だけを出すこと、送信の分岐（成功・拡張なし・例外・reject）、エクスプローラー（単一・複数・空・引数なし・バイナリ混在・フォルダの貼り付け・貼り付け失敗・拡張なし・ファイルとフォルダの混在・コピーと警告を 1 回にまとめる・同じ理由を 1 回だけ書く）、失敗の経路（フォーカス後の貼り付け失敗・フォルダか調べられない・エディタで表示できない・シンボリックリンクのフォルダ） | 32 |
 | `test/unit/manifest.test.js` | package.json の基本項目と category、宣言とコード（`COMMANDS`）の一致、メニューの `when` 条件、制限モードの宣言、公式拡張にコマンドが存在するか | 17 |
 | `test/run-unit.js` | ユニットテストの実行スクリプト（Windows / 古いNodeでも動くようにファイルを列挙） | — |
 | `test/integration/runTest.js` | `@vscode/test-electron` でテスト用VS Codeを起動（他の拡張は無効） | — |

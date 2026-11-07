@@ -97,9 +97,8 @@ describe('メニューの表示条件', () => {
   });
 });
 
-// 実際にインストールされている公式拡張の package.json を見て、呼ぶコマンドがまだ存在するかを確認する。
-// 公式拡張の更新でコマンド名が変わったときに気づくためのテスト。
-// 見つからない環境ではスキップ。場所は CLAUDE_EXT_DIR で指定も可能。
+// インストール済みの公式拡張に、呼ぶコマンドがまだあるか確かめる（名前が変わったら気づける）。
+// 見つからなければスキップ。場所は CLAUDE_EXT_DIR で指定できる。
 function findClaudeExtension() {
   const candidates = [];
   if (process.env.CLAUDE_EXT_DIR) candidates.push(process.env.CLAUDE_EXT_DIR);

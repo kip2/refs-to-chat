@@ -1,16 +1,6 @@
-// Right Click Mention
-// 右クリックメニューから、選択範囲・ファイル・フォルダの参照（@src/app.ts#5-10 など）を
-// 公式 Claude Code 拡張のチャットに入れる。
-// 対象は VS Code のパネル版のみ（claudeCode.useTerminal = true のときはメニュー自体を出さない）。
-//
-// ファイルの役目:
-//   extension.ts  … コマンドの登録（このファイル）
-//   commands.ts   … 2 つのコマンドの処理
-//   claudeChat.ts … 公式拡張とのやり取り
-//   fallback.ts   … 公式コマンドで入れられなかったときの貼り付け・コピー
-//   workspace.ts  … パスの変換、フォルダの判定、ファイルを開く
-//   reference.ts  … 参照の文字列を作る（vscode に依存しない）
-//   constants.ts  … コマンド ID などの定数（vscode に依存しない）
+// Right Click Mention: 右クリックから、選択範囲・ファイル・フォルダの参照を Claude のチャットに入れる。
+// パネル版だけが対象（claudeCode.useTerminal = true のときはメニューを出さない）。
+// 各ファイルの役目は docs/ARCHITECTURE.md の 4 章を参照。
 
 import * as vscode from 'vscode';
 import { addActiveEditorToChat, addExplorerItemsToChat } from './commands';

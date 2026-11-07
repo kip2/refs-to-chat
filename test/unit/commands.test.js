@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const { setup, makeEditor, makeSelection, uri } = require('../helpers/vscode-mock');
 const { CLAUDE, PASTE_COMMAND } = require('../../out/constants');
 
+// constants.ts から読まずに直書きしているのは、ID が勝手に変わったら気づけるようにするため
 const CMD = 'claude-vscode.insertAtMention';
 const FOCUS = 'claude-vscode.focus';
 const PASTE = 'editor.action.clipboardPasteAction';
@@ -43,7 +44,7 @@ describe('activate / deactivate', () => {
 
   it('extension.js が公開するのは activate と deactivate だけ', () => {
     const { ext } = setup();
-    assert.deepEqual(Object.keys(ext).filter((k) => k !== '__esModule').sort(), ['activate', 'deactivate']);
+    assert.deepEqual(Object.keys(ext).sort(), ['activate', 'deactivate']);
   });
 });
 
@@ -78,20 +79,14 @@ describe('エディタからの送信（sendSelection / sendCurrentFile）', () 
     assert.match(state.warnings[0], /@src\/app\.ts#5-10/);
   });
 
-  it('公式コマンドが例外 → クリップボードへ（例外は外に出さない）', async () => {
+  // executeCommand は常に Promise を返すので、失敗は reject として届く
+  it('公式コマンドが失敗 → クリップボードへ（例外は外に出さない）', async () => {
     const { vscode, state, run } = setup({ onExecute: () => { throw new Error('command not found'); } });
     vscode.window.activeTextEditor = makeEditor('/ws/project/src/app.ts', makeSelection(0, 0, 0, 3));
     await assert.doesNotReject(run('rightClickMention.sendSelection'));
     assert.deepEqual(state.executed, [CMD]);
     assert.equal(state.clipboard, '@src/app.ts#1');
     assert.match(state.warnings[0], /失敗/);
-  });
-
-  it('公式コマンドが非同期で reject しても同様にフォールバック', async () => {
-    const { vscode, state, run } = setup({ onExecute: async () => { throw new Error('boom'); } });
-    vscode.window.activeTextEditor = makeEditor('/ws/project/b.js');
-    await run('rightClickMention.sendCurrentFile');
-    assert.equal(state.clipboard, '@b.js');
   });
 
   it('マルチルートのフォールバックはフォルダ名付き', async () => {
@@ -204,13 +199,65 @@ describe('エクスプローラーからの送信（sendFile）', () => {
     assert.deepEqual(state.infos, []);
   });
 
-  it('Claude拡張が無いときは、フォルダでも貼り付けを試さない', async () => {
+  it('フォーカスは移ったが貼り付けに失敗 → コピーしたまま警告を 1 回', async () => {
+    const SRC = uri('/ws/project/src');
+    const { state, run } = setup({
+      isFolder: (p) => p === '/ws/project/src',
+      onExecute: (id) => { if (id === PASTE) throw new Error('paste failed'); },
+    });
+    await run('rightClickMention.sendFile', SRC);
+    assert.deepEqual(state.executed, [FOCUS, PASTE]);
+    assert.equal(state.clipboard, '@src/');
+    assert.equal(state.warnings.length, 1);
+    assert.deepEqual(state.infos, []);
+  });
+
+  it('Claude拡張が無いときは、フォルダでも貼り付けを試さず、拡張が無いことを伝える', async () => {
     const SRC = uri('/ws/project/src');
     const { state, run } = setup({ claudeInstalled: false, isFolder: (p) => p === '/ws/project/src' });
     await run('rightClickMention.sendFile', SRC);
     assert.deepEqual(state.executed, []);
     assert.deepEqual(state.clipboardWrites, ['@src/']);
     assert.equal(state.warnings.length, 1);
+    assert.match(state.warnings[0], /Claude Code拡張が見つかりません/);
+  });
+
+  it('フォルダへのシンボリックリンクもフォルダとして扱う', async () => {
+    const LINK = uri('/ws/project/linked');
+    const { state, run } = setup({ isSymlinkFolder: (p) => p === '/ws/project/linked' });
+    await run('rightClickMention.sendFile', LINK);
+    assert.deepEqual(state.opened, []);
+    assert.deepEqual(state.clipboardWrites, ['@linked/']);
+  });
+
+  it('フォルダか調べられない → ファイルとして開いて送る', async () => {
+    const { state, run } = setup({ statFails: (p) => p === '/ws/project/a.js' });
+    await run('rightClickMention.sendFile', A);
+    assert.deepEqual(state.opened, ['/ws/project/a.js']);
+    assert.deepEqual(state.executed, [CMD]);
+  });
+
+  it('エディタで表示できないファイルがあっても止まらず、残りと後回しの分を届ける', async () => {
+    const SRC = uri('/ws/project/src');
+    const { state, run } = setup({
+      isFolder: (p) => p === '/ws/project/src',
+      showFails: (p) => p === '/ws/project/a.js',
+    });
+    await assert.doesNotReject(run('rightClickMention.sendFile', A, [SRC, A, B]));
+    assert.deepEqual(state.executed, [CMD, FOCUS, PASTE]); // B は送り、src と a.js は貼り付け
+    assert.deepEqual(state.clipboardWrites, ['@src/ @a.js']);
+  });
+
+  it('同じ理由は 1 回だけ、最初に出た順で警告に書く', async () => {
+    const SRC = uri('/ws/project/src');
+    const DOCS = uri('/ws/project/docs');
+    const { state, run } = setup({
+      claudeInstalled: false,
+      isFolder: (p) => p === '/ws/project/src' || p === '/ws/project/docs',
+    });
+    await run('rightClickMention.sendFile', SRC, [SRC, A, DOCS]);
+    const reasons = state.warnings[0].split('。').slice(0, -1);
+    assert.deepEqual(reasons, ['Claude Code拡張が見つかりません', 'フォルダはチャットに直接入れられません']);
   });
 
   it('ファイルとフォルダの混在 → ファイルは送り、フォルダだけまとめてコピー', async () => {

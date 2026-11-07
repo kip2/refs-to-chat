@@ -1,4 +1,4 @@
-// VS Code API の最小限のモック。src/extension.ts（コンパイル後の out/extension.js）が使う部分だけを再現し、呼び出しを記録する。
+// VS Code API の最小限のモック。拡張（out/*.js）が使う部分だけを再現し、呼び出しを記録する。
 'use strict';
 
 const path = require('path');
@@ -42,6 +42,9 @@ function makeEditor(fsPath, selection = new Range(0, 0, 0, 0)) {
  * @param {(id:string)=>any} [opts.onExecute] executeCommand の挙動（throw で失敗を再現）
  * @param {(fsPath:string)=>boolean} [opts.isBinary] openTextDocument が失敗するファイル
  * @param {(fsPath:string)=>boolean} [opts.isFolder] workspace.fs.stat でフォルダと答えるパス
+ * @param {(fsPath:string)=>boolean} [opts.isSymlinkFolder] フォルダへのシンボリックリンク（Directory | SymbolicLink）
+ * @param {(fsPath:string)=>boolean} [opts.statFails] workspace.fs.stat が失敗するパス
+ * @param {(fsPath:string)=>boolean} [opts.showFails] showTextDocument が失敗するファイル
  */
 function createVscodeMock(opts = {}) {
   const folders = (opts.workspaceFolders || ['/ws/project']).map((p, i) => ({
@@ -61,20 +64,25 @@ function createVscodeMock(opts = {}) {
     shown: [],             // showTextDocument の { fsPath, options }
   };
 
+  const FileType = { Unknown: 0, File: 1, Directory: 2, SymbolicLink: 64 };
+  const is = (pred, p) => Boolean(pred && pred(p));
+
   const vscode = {
     Range,
     Position,
-    FileType: { Unknown: 0, File: 1, Directory: 2, SymbolicLink: 64 },
+    FileType,
     workspace: {
       workspaceFolders: folders,
       fs: {
         async stat(u) {
-          const dir = Boolean(opts.isFolder && opts.isFolder(u.fsPath));
-          return { type: dir ? 2 : 1, ctime: 0, mtime: 0, size: 0 };
+          if (is(opts.statFails, u.fsPath)) throw new Error('EntryNotFound (FileSystemError)');
+          let type = FileType.File;
+          if (is(opts.isFolder, u.fsPath)) type = FileType.Directory;
+          if (is(opts.isSymlinkFolder, u.fsPath)) type = FileType.Directory | FileType.SymbolicLink;
+          return { type, ctime: 0, mtime: 0, size: 0 };
         },
       },
-      // VS Code の asRelativePath(pathOrUri, includeWorkspaceFolder) の挙動を再現
-      // includeWorkspaceFolder 省略時はフォルダが2つ以上のときに true 扱い
+      // asRelativePath の再現。第 2 引数を省くと、フォルダが 2 つ以上のときだけ true
       asRelativePath(target, includeWorkspaceFolder) {
         const p = typeof target === 'string' ? target : target.fsPath;
         const folder = [...folders]
@@ -92,18 +100,19 @@ function createVscodeMock(opts = {}) {
         }
         return { uri: u, fileName: u.fsPath };
       },
-      getConfiguration: () => ({ get: (_k, d) => d }),
     },
     window: {
       activeTextEditor: undefined,
       async showTextDocument(doc, options) {
         state.shown.push({ fsPath: doc.uri.fsPath, options });
+        if (is(opts.showFails, doc.uri.fsPath)) throw new Error('Could not open editor');
         const editor = { document: doc, selection: options && options.selection ? options.selection : new Range(0, 0, 0, 0) };
         vscode.window.activeTextEditor = editor;
         return editor;
       },
-      showWarningMessage: (m) => { state.warnings.push(m); },
-      showInformationMessage: (m) => { state.infos.push(m); },
+      // 本物と同じく Thenable を返す（ユーザーが閉じるまで解決しない想定。ここではすぐ undefined）
+      showWarningMessage: (m) => { state.warnings.push(m); return Promise.resolve(undefined); },
+      showInformationMessage: (m) => { state.infos.push(m); return Promise.resolve(undefined); },
     },
     commands: {
       registerCommand(id, handler) {
@@ -135,8 +144,7 @@ const EXT_PATH = path.join(OUT_DIR, 'extension.js');
 
 /**
  * モックを差し込んで out/extension.js を毎回まっさらに読み込む。
- * extension.js が読み込む out/ の他のファイル（commands.js など）も 'vscode' を読み込むので、
- * テストごとに別のモックを使えるよう、out/ のファイルはすべてキャッシュから外す。
+ * out/ の各ファイルが 'vscode' を読むので、テストごとにモックを替えられるよう out/ のキャッシュを全部消す。
  */
 function loadExtension(vscode) {
   for (const key of Object.keys(require.cache)) {
