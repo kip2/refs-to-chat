@@ -19,14 +19,15 @@ flowchart LR
     subgraph Menus["右クリックメニュー（package.json で宣言）"]
       M1["エディタ: 選択あり<br/>Claudeに選択範囲を送る"]
       M2["エディタ: 選択なし<br/>Claudeにこのファイルを送る"]
-      M3["エクスプローラー: ファイル<br/>Claudeにファイルを送る"]
+      M3["エクスプローラー: ファイル・フォルダ<br/>Claudeにファイル・フォルダを送る"]
     end
 
     subgraph Ext["この拡張（src/extension.ts）"]
       SAE["sendActiveEditor()"]
       SF["sendFiles(clicked, selected)"]
       IM["insertMention(editor)"]
-      FB["fallbackCopy()<br/>buildReference() / relPath()"]
+      STC["sendToClaude()"]
+      FB["copyReferences()<br/>buildReference() / buildFolderReference()"]
     end
 
     subgraph Claude["公式 Claude Code 拡張"]
@@ -40,12 +41,13 @@ flowchart LR
   M1 --> SAE
   M2 --> SAE
   M3 --> SF
-  SF -->|ファイルを開いて| IM
   SAE --> IM
-  IM --> C1
+  IM --> STC
+  SF -->|ファイルを開いて| STC
+  STC --> C1
   C1 --> P
   IM -.->|拡張が無い / 失敗| FB
-  SF -.->|テキストで開けない| CB
+  SF -.->|フォルダ / 開けない / 拡張が無い / 失敗<br/>（まとめて 1 回）| FB
   FB -.-> CB
 ```
 
@@ -53,7 +55,7 @@ flowchart LR
 
 - メニュー項目・表示条件は `package.json` の `contributes.menus` だけで決まる（コードは書いていない）。
 - 実際に `@file#5-10` を作ってチャットに入れるのは公式拡張。この拡張はそのコマンドを呼ぶだけ。
-- 公式拡張が使えない時だけ、自前で参照文字列を作ってクリップボードに入れる。
+- チャットに入れられないもの（フォルダ、テキストで開けないファイル、公式拡張が使えないとき）だけ、自前で参照文字列を作ってクリップボードに入れる。複数あるときは空白でつないで 1 回だけコピーし、警告も 1 回にまとめる。
 
 ---
 
@@ -71,7 +73,9 @@ flowchart LR
 | `LICENSE` | MIT ライセンス |
 | `.vscodeignore` | vsix に入れないファイルの指定（`src/`・`docs/`・`test/` など。vsix に入るのは `out/extension.js`・`package.json`・README・LICENSE） |
 | `.gitignore` | git に入れないファイルの指定（`node_modules/`・`out/`・`*.vsix` など） |
-| `.github/workflows/release.yml` | タグを push すると、テスト → vsix 作成 → Releases に添付 |
+| `.github/workflows/release.yml` | タグを push すると、テスト → vsix 作成 → Releases に添付（→ 9章） |
+| `.github/dependabot.yml` | Action と devDependencies の更新を PR で知らせる |
+| `.gitattributes` | 改行を LF にそろえる |
 | `test/` | テスト一式（→ 10章）。vsix には含めない |
 
 vsix はリポジトリに入れない。配るときは `npm run package` で作り、GitHub の Releases に添付する。
@@ -90,7 +94,7 @@ flowchart TB
   subgraph menus["contributes.menus"]
     E1["editor/context<br/>when: editorHasSelection"] --> A
     E2["editor/context<br/>when: !editorHasSelection"] --> B
-    E3["explorer/context<br/>when: !explorerResourceIsFolder"] --> C
+    E3["explorer/context<br/>（ファイルにもフォルダにも出す）"] --> C
     NOTE["※ すべての when に<br/>&& !config.claudeCode.useTerminal を付与"]
     E4["commandPalette<br/>when: false（パレットに出さない）"] --> C
   end
@@ -100,6 +104,7 @@ flowchart TB
 - すべての `when` に `!config.claudeCode.useTerminal` を付けているので、ターミナル版の設定ではメニュー・パレットに出ない（公式拡張のコマンドパレット設定と同じ条件）。
 - `sendFile` はエクスプローラーで選んだURIを引数に受け取る前提なので、コマンドパレットからは隠している。
 - `activationEvents` は書いていない。VS Code 1.74 以降はコマンド実行時に自動で有効化される。
+- `capabilities.untrustedWorkspaces.supported: false` で、制限モード（信頼していないワークスペース）では動かさない。
 
 ---
 
@@ -109,10 +114,13 @@ flowchart TB
 |---|---|
 | `activate(context)` | 3つのコマンドを登録（`sendSelection` と `sendCurrentFile` は同じ処理） |
 | `sendActiveEditor()` | エディタからの右クリック。アクティブなエディタを `insertMention` に渡す |
-| `sendFiles(clicked, selected)` | エクスプローラーからの右クリック。複数選択に対応。ファイルを開き、選択を空にしてから `insertMention` |
-| `insertMention(editor)` | 公式拡張の有無を確認 → 公式コマンドを実行。失敗したらフォールバック |
-| `fallbackCopy(editor, reason)` | 参照を作ってクリップボードにコピーし、警告を出す |
+| `sendFiles(clicked, selected)` | エクスプローラーからの右クリック。複数選択に対応。フォルダはコピーに回し、ファイルは開いて選択を空にしてから `sendToClaude`。送れなかったものは最後に `copyReferences` でまとめてコピー |
+| `insertMention(editor)` | `sendToClaude` で送り、送れなかったら `copyReferences` でコピー |
+| `sendToClaude()` | 公式拡張の有無を確認 → 公式コマンドを実行。送れなかった理由を返す（送れたら `undefined`） |
+| `copyReferences(refs, reasons)` | 参照を空白でつないで 1 回だけクリップボードにコピーし、理由をまとめた警告を 1 回出す |
+| `isFolder(uri)` | `workspace.fs.stat` でフォルダかどうかを調べる |
 | `buildReference(editor)` | `@path`, `@path#8`, `@path#5-10` を作る |
+| `buildFolderReference(uri)` | フォルダの参照 `@path/` を作る（末尾の `/` でファイルと区別） |
 | `relPath(uri)` | `asRelativePath` で公式と同じ形式のパスにする |
 
 ---
@@ -138,7 +146,7 @@ sequenceDiagram
   C->>W: 表示中のチャット全部に挿入（無ければ開いて挿入）
 ```
 
-### 5-2. エクスプローラーでファイルを右クリック
+### 5-2. エクスプローラーでファイル・フォルダを右クリック
 
 ```mermaid
 sequenceDiagram
@@ -147,17 +155,24 @@ sequenceDiagram
   participant E as この拡張
   participant C as 公式Claude拡張
 
-  U->>VS: ファイルを右クリック（複数選択可）
+  U->>VS: ファイル・フォルダを右クリック（複数選択可）
   VS->>E: rightClickMention.sendFile(clicked, selected[])
-  loop 選択されたファイルごと
-    E->>VS: openTextDocument + showTextDocument（選択は 0,0 で空）
-    alt テキストとして開けた
-      E->>C: insertMention → 公式コマンド
-      C-->>U: @path がチャットに入る
-    else 画像などで開けない
-      E-->>U: @path をクリップボードにコピー + 警告
+  loop 選択されたものごと
+    E->>VS: workspace.fs.stat
+    alt フォルダ
+      E->>E: @path/ をコピー待ちに追加
+    else ファイル
+      E->>VS: openTextDocument + showTextDocument（選択は 0,0 で空）
+      alt テキストとして開けた
+        E->>C: sendToClaude → 公式コマンド
+        C-->>U: @path がチャットに入る
+        Note over E,C: 公式拡張が無い・失敗したら @path をコピー待ちに追加
+      else 画像などで開けない
+        E->>E: @path をコピー待ちに追加
+      end
     end
   end
+  E-->>U: コピー待ちがあれば、空白でつないで 1 回だけコピー + 警告 1 回
 ```
 
 ファイルを一度エディタで開くのは、公式コマンドが「アクティブなエディタ」からしか参照を作れないため（URIを引数で渡す口がない）。
@@ -166,8 +181,8 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-  S([insertMention]) --> Q1{公式拡張<br/>anthropic.claude-code<br/>がある？}
-  Q1 -- いいえ --> F[fallbackCopy<br/>参照をクリップボードへ]
+  S([sendToClaude]) --> Q1{公式拡張<br/>anthropic.claude-code<br/>がある？}
+  Q1 -- いいえ --> F[理由を返す → copyReferences<br/>参照をクリップボードへ]
   Q1 -- はい --> P[claude-vscode.insertAtMention]
   P --> Q3{例外が出た？}
   Q3 -- はい --> F
@@ -187,6 +202,8 @@ flowchart TD
 | 複数行 | `@src/app.ts#5-10` |
 | マルチルート | `@beta/src/app.ts`（先頭にフォルダ名） |
 | ワークスペース外 | 絶対パス |
+| フォルダ | `@src/components/`（末尾に `/`。クリップボードにコピー） |
+| 複数（コピーするとき） | `@src/ @docs/ @logo.png`（空白でつなぐ） |
 
 公式との違い（フォールバック時のみ）: 次の行の先頭で選択が終わっている場合、この拡張は最終行を1行減らす（公式は減らさない）。
 
@@ -231,6 +248,13 @@ npm run package   # = vsce package。直前に vscode:prepublish でコンパイ
 
 配布用の VSIX は GitHub Actions（`.github/workflows/release.yml`）が作る。`v*` のタグを push すると、`package` ジョブ（読み取り権限のみ）がテストと VSIX 作成を行い、`release` ジョブ（書き込み権限あり・依存は入れない）が Releases に添付する。手順は README の「リリースの手順」を参照。
 
+安全のための設定:
+
+- `package` ジョブは `npm ci --ignore-scripts` で、依存パッケージのインストールスクリプトを動かさない。checkout の認証情報も残さない（`persist-credentials: false`）。
+- 外部の Action はコミットの SHA で固定している。
+- `release` ジョブは、vsix に出どころの証明（`actions/attest-build-provenance`）を付ける。`gh attestation verify <vsix> -R kip2/right-click-mention` で確かめられる。
+- `.github/dependabot.yml` で、Action と npm の devDependencies の更新を月 1 回 PR にする（`@types/vscode` は `engines.vscode` に合わせて手で上げる）。
+
 ---
 
 ## 10. テスト
@@ -262,11 +286,11 @@ flowchart LR
 |---|---|---|
 | `test/helpers/vscode-mock.js` | VS Code API のモック。`asRelativePath` のマルチルート挙動、`Selection` の正規化、バイナリで開けないファイルなどを再現。`setup()` でモック＋拡張＋activate を一度に用意 | — |
 | `test/unit/buildReference.test.js` | 行番号（1行・複数行・次行先頭で終わる・逆方向選択）、パス形式（単一・マルチルート・別の場所・入れ子・ワークスペース外） | 15 |
-| `test/unit/commands.test.js` | コマンド登録と dispose、送信の分岐（成功・拡張なし・例外・reject）、エクスプローラー（単一・複数・空・引数なし・バイナリ混在） | 20 |
-| `test/unit/manifest.test.js` | package.json の基本項目、宣言とコードの一致、メニューの `when` 条件、公式拡張にコマンドが存在するか | 14 |
+| `test/unit/commands.test.js` | コマンド登録と dispose、送信の分岐（成功・拡張なし・例外・reject）、エクスプローラー（単一・複数・空・引数なし・バイナリ混在・フォルダ・ファイルとフォルダの混在・コピーと警告を 1 回にまとめる） | 25 |
+| `test/unit/manifest.test.js` | package.json の基本項目、宣言とコードの一致、メニューの `when` 条件、制限モードの宣言、公式拡張にコマンドが存在するか | 15 |
 | `test/run-unit.js` | ユニットテストの実行スクリプト（Windows / 古いNodeでも動くようにファイルを列挙） | — |
 | `test/integration/runTest.js` | `@vscode/test-electron` でテスト用VS Codeを起動（他の拡張は無効） | — |
-| `test/integration/suite/extension.itest.js` | 実VS Code上でマルチルートのパス、選択の扱い、エクスプローラー送信、バイナリファイル | 14 |
+| `test/integration/suite/extension.itest.js` | 実VS Code上でマルチルートのパス、選択の扱い、エクスプローラー送信、バイナリファイル、フォルダの判定、ファイルとフォルダの混在 | 16 |
 | `test/fixtures/multi-root/` | 統合テスト用ワークスペース（同名の `app.js` を持つ alpha / beta、バイナリファイル） | — |
 
 ### 実行方法

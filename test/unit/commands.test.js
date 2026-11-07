@@ -161,11 +161,56 @@ describe('エクスプローラーからの送信（sendFile）', () => {
     assert.doesNotMatch(state.warnings[0], /テキストとして開けない/);
   });
 
-  it('Claude拡張が無い → 各ファイルの参照をコピー（最後のものが残る）', async () => {
+  it('Claude拡張が無い → 全部の参照をまとめて 1 回でコピーし、警告も 1 回', async () => {
     const { state, run } = setup({ claudeInstalled: false });
     await run('rightClickMention.sendFile', A, [A, B]);
-    assert.deepEqual(state.clipboardWrites, ['@a.js', '@b.js']);
-    assert.equal(state.clipboard, '@b.js');
+    assert.deepEqual(state.clipboardWrites, ['@a.js @b.js']);
+    assert.equal(state.warnings.length, 1);
+    assert.match(state.warnings[0], /Claude Code拡張が見つかりません/);
+  });
+
+  it('フォルダ → 末尾に / を付けてコピー（開かない・公式コマンドも呼ばない）', async () => {
+    const SRC = uri('/ws/project/src');
+    const { state, run } = setup({ isFolder: (p) => p === '/ws/project/src' });
+    await run('rightClickMention.sendFile', SRC);
+    assert.deepEqual(state.opened, []);
+    assert.deepEqual(state.executed, []);
+    assert.deepEqual(state.clipboardWrites, ['@src/']);
+    assert.equal(state.warnings.length, 1);
+    assert.match(state.warnings[0], /フォルダ/);
+  });
+
+  it('ファイルとフォルダの混在 → ファイルは送り、フォルダだけまとめてコピー', async () => {
+    const SRC = uri('/ws/project/src');
+    const DOCS = uri('/ws/project/docs');
+    const { state, run } = setup({ isFolder: (p) => p === '/ws/project/src' || p === '/ws/project/docs' });
+    await run('rightClickMention.sendFile', A, [SRC, A, DOCS]);
+    assert.deepEqual(state.opened, ['/ws/project/a.js']);
+    assert.deepEqual(state.executed, [CMD]);
+    assert.deepEqual(state.clipboardWrites, ['@src/ @docs/']);
+    assert.equal(state.warnings.length, 1);
+  });
+
+  it('理由が違うものが混ざっても、コピーも警告も 1 回で、理由は全部書く', async () => {
+    const SRC = uri('/ws/project/src');
+    const { state, run } = setup({
+      claudeInstalled: false,
+      isFolder: (p) => p === '/ws/project/src',
+      isBinary: (p) => p.endsWith('.png'),
+    });
+    await run('rightClickMention.sendFile', A, [A, SRC, IMG]);
+    assert.deepEqual(state.clipboardWrites, ['@a.js @src/ @logo.png']);
+    assert.equal(state.warnings.length, 1);
+    assert.match(state.warnings[0], /Claude Code拡張が見つかりません/);
+    assert.match(state.warnings[0], /フォルダ/);
+    assert.match(state.warnings[0], /テキストとして開けない/);
+  });
+
+  it('全部チャットに送れたら、クリップボードには触らない', async () => {
+    const { state, run } = setup();
+    await run('rightClickMention.sendFile', A, [A, B]);
+    assert.deepEqual(state.clipboardWrites, []);
+    assert.deepEqual(state.warnings, []);
   });
 
   it('マルチルートの別フォルダのファイル', async () => {

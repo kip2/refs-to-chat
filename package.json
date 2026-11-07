@@ -21,6 +21,11 @@
     "Other"
   ],
   "main": "./out/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    }
+  },
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
@@ -52,7 +57,7 @@
       },
       {
         "command": "rightClickMention.sendFile",
-        "title": "Claudeにファイルを送る"
+        "title": "Claudeにファイル・フォルダを送る"
       }
     ],
     "menus": {
@@ -71,7 +76,7 @@
       "explorer/context": [
         {
           "command": "rightClickMention.sendFile",
-          "when": "!explorerResourceIsFolder && !config.claudeCode.useTerminal",
+          "when": "!config.claudeCode.useTerminal",
           "group": "navigation@100"
         }
       ],

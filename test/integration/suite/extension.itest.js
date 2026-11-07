@@ -112,11 +112,11 @@ describe('Right Click Mention（実VS Code・マルチルート）', function ()
       assert.strictEqual(await clipboard(), '@alpha/src/app.js');
     });
 
-    it('複数選択 → 順に処理し、最後のファイルが残る', async function () {
+    it('複数選択 → 順に処理し、参照はまとめてコピー。最後のファイルが開いて残る', async function () {
       const a = fileIn('alpha', 'src/app.js');
       const b = fileIn('beta', 'src/only-in-beta.js');
       await vscode.commands.executeCommand('rightClickMention.sendFile', a, [a, b]);
-      assert.strictEqual(await clipboard(), '@beta/src/only-in-beta.js');
+      assert.strictEqual(await clipboard(), '@alpha/src/app.js @beta/src/only-in-beta.js');
       assert.strictEqual(vscode.window.activeTextEditor.document.uri.toString(), b.toString());
     });
 
@@ -124,6 +124,19 @@ describe('Right Click Mention（実VS Code・マルチルート）', function ()
       const uri = fileIn('alpha', 'binary.bin');
       await vscode.commands.executeCommand('rightClickMention.sendFile', uri, [uri]);
       assert.strictEqual(await clipboard(), '@alpha/binary.bin');
+    });
+
+    it('フォルダ → 本物のファイルシステムでフォルダと判定し、@folder/ をコピー', async function () {
+      const dir = fileIn('alpha', 'src');
+      await vscode.commands.executeCommand('rightClickMention.sendFile', dir, [dir]);
+      assert.strictEqual(await clipboard(), '@alpha/src/');
+    });
+
+    it('ファイルとフォルダの混在 → まとめて 1 回でコピー', async function () {
+      const dir = fileIn('beta', 'src');
+      const a = fileIn('alpha', 'src/app.js');
+      await vscode.commands.executeCommand('rightClickMention.sendFile', dir, [dir, a]);
+      assert.strictEqual(await clipboard(), '@beta/src/ @alpha/src/app.js');
     });
   });
 });

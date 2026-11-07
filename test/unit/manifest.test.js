@@ -59,9 +59,13 @@ describe('メニューの表示条件', () => {
     assert.doesNotMatch(sel.when, /!editorHasSelection/);
   });
 
-  it('エクスプローラー: フォルダには出さない', () => {
+  it('エクスプローラー: ファイルにもフォルダにも出す', () => {
     assert.equal(explorer.length, 1);
-    assert.match(explorer[0].when, /!explorerResourceIsFolder/);
+    assert.doesNotMatch(explorer[0].when, /explorerResourceIsFolder/);
+  });
+
+  it('制限モード（信頼していないワークスペース）では動かない', () => {
+    assert.equal(pkg.capabilities.untrustedWorkspaces.supported, false);
   });
 
   it('右クリックメニューはすべてターミナル版の設定では出さない', () => {

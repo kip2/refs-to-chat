@@ -41,6 +41,7 @@ function makeEditor(fsPath, selection = new Range(0, 0, 0, 0)) {
  * @param {boolean}  [opts.claudeInstalled=true]
  * @param {(id:string)=>any} [opts.onExecute] executeCommand の挙動（throw で失敗を再現）
  * @param {(fsPath:string)=>boolean} [opts.isBinary] openTextDocument が失敗するファイル
+ * @param {(fsPath:string)=>boolean} [opts.isFolder] workspace.fs.stat でフォルダと答えるパス
  */
 function createVscodeMock(opts = {}) {
   const folders = (opts.workspaceFolders || ['/ws/project']).map((p, i) => ({
@@ -63,8 +64,15 @@ function createVscodeMock(opts = {}) {
   const vscode = {
     Range,
     Position,
+    FileType: { Unknown: 0, File: 1, Directory: 2, SymbolicLink: 64 },
     workspace: {
       workspaceFolders: folders,
+      fs: {
+        async stat(u) {
+          const dir = Boolean(opts.isFolder && opts.isFolder(u.fsPath));
+          return { type: dir ? 2 : 1, ctime: 0, mtime: 0, size: 0 };
+        },
+      },
       // VS Code の asRelativePath(pathOrUri, includeWorkspaceFolder) の挙動を再現
       // includeWorkspaceFolder 省略時はフォルダが2つ以上のときに true 扱い
       asRelativePath(target, includeWorkspaceFolder) {
