@@ -2,7 +2,7 @@
   "name": "right-click-mention",
   "displayName": "Right Click Mention",
   "description": "右クリックから選択範囲やファイルをClaude Codeのチャットに送る",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "publisher": "kip2",
   "license": "MIT",
   "private": true,

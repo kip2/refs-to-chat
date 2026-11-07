@@ -3,7 +3,7 @@
 右クリックメニューから、公式 Claude Code 拡張の「Insert @-Mention Reference」（Alt+K）を呼び出すだけの薄いラッパー拡張。
 自前でClaudeと通信はせず、**入口（メニュー）を足して、処理は公式拡張に委ねる**のが基本方針。
 
-- バージョン: 0.0.4
+- バージョン: 0.0.5
 - 対象モード: VS Code のClaudeパネル版のみ（`claudeCode.useTerminal` が true のときはメニューを出さない）
 - 言語: TypeScript（本体もテストも `src/` に置き、`tsc` で `out/` にコンパイル）
 - 対象: VS Code 1.94 以上、公式拡張 `anthropic.claude-code`（v2.1.317 で確認）
@@ -73,7 +73,7 @@ flowchart LR
 | `package.json` | 拡張のマニフェスト。コマンド3つと右クリックメニューを宣言 |
 | `src/` | 本体（→ 4章）。役目ごとにファイルを分けている |
 | `out/` | `src/` のコンパイル結果。`package.json` の `main` はここを指す。git には入れない |
-| `tsconfig.json` | TypeScript の設定（`strict` で型を厳しくチェック） |
+| `tsconfig.json` | TypeScript の設定（`strict` で型を厳しくチェック）。TypeScript 6 から `@types/*` が自動で読み込まれないので、`types` に node / mocha / vscode を書いている |
 | `eslint.config.mjs` | ESLint の設定（→ 9章） |
 | `.node-version` | 使う Node のバージョン（26）。CI の `setup-node` もここを読む |
 | `.vscode/launch.json` / `tasks.json` | `F5` でコンパイルしてから拡張開発ホストを起動する設定 |
@@ -84,7 +84,9 @@ flowchart LR
 | `.vscodeignore` | vsix に入れないファイルの指定（`src/`・`docs/`・`out/test/` など。vsix に入るのは `out/*.js`・`package.json`・README・LICENSE） |
 | `.gitignore` | git に入れないファイルの指定（`node_modules/`・`out/`・`*.vsix` など） |
 | `.github/workflows/release.yml` | タグを push すると、テスト → vsix 作成 → Releases に添付（→ 9章） |
-| `.github/dependabot.yml` | Action と devDependencies の更新を PR で知らせる |
+| `.github/workflows/ci.yml` | PR と main への push で、`npm ci`・ESLint・ユニットテスト・vsix 作成を確かめる |
+| `CHANGELOG.md` | 変更履歴。リリースの説明文はここから作る |
+| `.github/dependabot.yml` | Action と devDependencies の更新を PR で知らせる。TypeScript は、typescript-eslint が対応している 6.0 までに止めている |
 | `.gitattributes` | 改行を LF にそろえる |
 | `src/test/` | テスト一式（→ 10章）。`out/test/` にコンパイルされるが、vsix には含めない |
 
@@ -307,7 +309,9 @@ npm run package   # = vsce package。直前に vscode:prepublish でコンパイ
 # 更新時は package.json の version を上げてから再パッケージ → VSIX から再インストール
 ```
 
-配布用の VSIX は GitHub Actions（`.github/workflows/release.yml`）が作る。`v*` のタグを push すると、`package` ジョブ（読み取り権限のみ）がテストと VSIX 作成を行い、`release` ジョブ（書き込み権限あり・依存は入れない）が Releases に添付する。手順は README の「リリースの手順」を参照。
+配布用の VSIX は GitHub Actions（`.github/workflows/release.yml`）が作る。`v*` のタグを push すると、`package` ジョブ（読み取り権限のみ）がテストと VSIX 作成を行い、`release` ジョブ（書き込み権限あり・依存は入れない）が Releases に添付する。リリースの説明文は `CHANGELOG.md` の該当バージョンの項目から作る（項目がなければ失敗する）。手順は README の「リリースの手順」を参照。
+
+PR と main への push では `.github/workflows/ci.yml` が `npm ci`・ESLint・ユニットテスト・vsix 作成を確かめる。Dependabot の PR もここで確かめられるので、壊れる更新は取り込む前に気づける（TypeScript 7 への更新で `npm ci` が失敗したことがきっかけ）。
 
 ESLint（`eslint.config.mjs`）:
 

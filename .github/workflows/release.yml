@@ -72,6 +72,13 @@ jobs:
       id-token: write # attestation の署名用
       attestations: write # attestation の保存用
     steps:
+      # リリースの説明文に使う CHANGELOG.md だけを取り出す（依存は入れない）
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: CHANGELOG.md
+          sparse-checkout-cone-mode: false
+
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: vsix
@@ -83,15 +90,32 @@ jobs:
         with:
           subject-path: ${{ needs.package.outputs.file }}
 
-      - name: Releases に添付（同じタグのリリースが既にあれば vsix を差し替える）
+      # CHANGELOG.md の「## [x.y.z]」から次の「## [」の手前までを、説明文にする
+      - name: リリースの説明文を CHANGELOG.md から取り出す
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            index($0, "## [" v "]") == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found && /^\[[0-9.]+\]: / { exit }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "::error::CHANGELOG.md に [$version] の項目がありません"
+            exit 1
+          fi
+          cat notes.md
+
+      - name: Releases に添付（同じタグのリリースが既にあれば vsix と説明文を差し替える）
         env:
           GH_TOKEN: ${{ github.token }}
           FILE: ${{ needs.package.outputs.file }}
         run: |
           if gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" "$FILE" -R "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --notes-file notes.md
           else
             gh release create "$GITHUB_REF_NAME" "$FILE" -R "$GITHUB_REPOSITORY" \
               --title "$GITHUB_REF_NAME" \
-              --generate-notes
+              --notes-file notes.md
           fi

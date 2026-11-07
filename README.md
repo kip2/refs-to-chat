@@ -81,20 +81,25 @@ npm run package             # VSIX ファイルを作る
 
 ### リリースの手順
 
-1. `package.json` の `version` を上げてコミットし、main に push する
-2. 同じ番号のタグを付けて push する
+1. [CHANGELOG.md](CHANGELOG.md) に、新しいバージョンの項目（`## [0.0.6] - 日付`）を書く
+2. `package.json` の `version` を上げてコミットし、main に push する
+3. 同じ番号のタグを付けて push する
 
    ```bash
    git push origin main
-   git tag v0.0.2
-   git push origin v0.0.2
+   git tag v0.0.6
+   git push origin v0.0.6
    ```
 
-3. GitHub Actions（[.github/workflows/release.yml](.github/workflows/release.yml)）がテストをして VSIX を作り、Releases に添付する
+4. GitHub Actions（[.github/workflows/release.yml](.github/workflows/release.yml)）がテストをして VSIX を作り、Releases に添付する。リリースの説明文は、CHANGELOG.md のそのバージョンの項目から作る
 
-タグと `version` が違うと、Actions は失敗します。同じタグのリリースが既にあるときは、VSIX だけを差し替えます。Actions の画面からブランチを選んで手動で実行すると、Releases は作らずに、VSIX だけを Actions の成果物（Artifacts）に置きます。
+タグと `version` が違うときや、CHANGELOG.md にそのバージョンの項目がないときは、Actions は失敗します。同じタグのリリースが既にあるときは、VSIX と説明文を差し替えます。Actions の画面からブランチを選んで手動で実行すると、Releases は作らずに、VSIX だけを Actions の成果物（Artifacts）に置きます。
 
 構成、処理の流れ、テストについては [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) を見てください。
+
+## 変更履歴
+
+[CHANGELOG.md](CHANGELOG.md) を見てください。
 
 ## ライセンス
 
