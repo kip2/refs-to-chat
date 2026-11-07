@@ -120,9 +120,9 @@ describe('メニューの表示条件', () => {
     assert.equal(whenOf(palette, COMMANDS.sendFile), 'false');
   });
 
-  it('パレットに出すコマンドは、ファイルを開いているときだけ、ターミナル版の設定では出さない', () => {
+  it('パレットに出すコマンドは、テキストのファイルが前面にあるときだけ、ターミナル版の設定では出さない', () => {
     for (const m of palette.filter((m) => m.when !== 'false')) {
-      assert.equal(m.when, `editorIsOpen && ${TERMINAL_GUARD}`, m.command);
+      assert.equal(m.when, `editorLangId && ${TERMINAL_GUARD}`, m.command);
     }
   });
 

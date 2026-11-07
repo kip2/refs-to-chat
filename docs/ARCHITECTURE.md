@@ -110,13 +110,13 @@ flowchart TB
     E3["explorer/context<br/>（ファイルにもフォルダにも出す）"] --> C
     NOTE["※ すべての when に<br/>&& !config.claudeCode.useTerminal を付与"]
     E4["commandPalette<br/>when: false（パレットに出さない）"] --> C
-    E5["commandPalette<br/>when: editorIsOpen"] --> A & B
+    E5["commandPalette<br/>when: editorLangId"] --> A & B
   end
 ```
 
 - `when` 条件で、選択の有無により**どちらか片方だけ**がメニューに出る。
 - すべての `when` に `!config.claudeCode.useTerminal` を付けているので、ターミナル版の設定ではメニュー・パレットに出ない（公式拡張のコマンドパレット設定と同じ条件）。
-- エディタの 2 つのコマンドは、エディタを開いているときだけコマンドパレットに出す（`editorIsOpen`）。
+- エディタの 2 つのコマンドは、テキストのファイルが前面にあるときだけコマンドパレットに出す（`editorLangId`）。`editorIsOpen` だと、Claude のチャットをエディタのタブで開いているだけでも出てしまい、押しても「開いているファイルがありません」になるため。
 - `sendFile` はエクスプローラーで選んだ URI を引数に受け取る前提なので、コマンドパレットからは隠している。
 - `activationEvents` は書いていない。VS Code 1.74 以降はコマンド実行時に自動で有効化される。
 - `capabilities.untrustedWorkspaces.supported: false` で、制限モード（信頼していないワークスペース）では動かさない。
