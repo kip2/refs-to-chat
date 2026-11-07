@@ -30,7 +30,7 @@ interface Manifest {
 
 // このファイルは out/test/unit/ にコンパイルされる
 const ROOT = path.resolve(__dirname, '../../..');
-const readManifest = (dir: string): Manifest => JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
+const readManifest = (dir: string) => JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')) as Manifest;
 
 const pkg = readManifest(ROOT);
 const menus = pkg.contributes.menus;

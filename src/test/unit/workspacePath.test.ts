@@ -51,7 +51,7 @@ describe('参照のパス形式', () => {
   it('asRelativePath に第2引数を渡さない（公式拡張と同じ扱い）', async () => {
     const { vscode, run } = setup({ claudeInstalled: false });
     const argCounts: number[] = [];
-    const orig = vscode.workspace.asRelativePath;
+    const orig = vscode.workspace.asRelativePath.bind(vscode.workspace);
     vscode.workspace.asRelativePath = (...args: Parameters<typeof orig>) => {
       argCounts.push(args.length);
       return orig(...args);

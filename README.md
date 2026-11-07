@@ -73,6 +73,7 @@ gh attestation verify right-click-mention-<バージョン>.vsix -R kip2/right-c
 ```bash
 npm install                 # 初回だけ
 npm run compile             # TypeScript をコンパイルする（npm run watch なら保存のたびにコンパイル）
+npm run lint                # ESLint でコードを調べる（await 忘れなど）
 npm test                    # コンパイルしてからユニットテスト
 npm run test:integration    # 本物の VS Code を使う統合テスト（初回はテスト用の VS Code をダウンロード）
 npm run package             # VSIX ファイルを作る

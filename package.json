@@ -31,6 +31,7 @@
     "compile": "tsc -p ./",
     "build": "npm run clean && npm run compile",
     "watch": "tsc -watch -p ./",
+    "lint": "eslint .",
     "pretest": "npm run build",
     "test": "node --test \"out/test/unit/**/*.test.js\"",
     "test:spec": "npm run build && node --test --test-reporter=spec \"out/test/unit/**/*.test.js\"",
@@ -40,13 +41,16 @@
     "package": "vsce package"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.17.6",
     "@types/vscode": "~1.94.0",
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.9.2",
+    "eslint": "^10.13.0",
     "mocha": "^10.8.2",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.72.0"
   },
   "contributes": {
     "commands": [

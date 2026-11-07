@@ -1,6 +1,9 @@
 // VS Code API の最小限のモック
 // 拡張（out/*.js）が使う部分だけを再現し、呼び出しを記録する
 
+// 本物の API と同じく Promise を返すために async にしている（中で await しないものもある）
+/* eslint-disable @typescript-eslint/require-await */
+
 import * as path from 'path';
 import Module = require('module');
 
@@ -220,6 +223,8 @@ export function loadExtension(vscode: VscodeMock): Extension {
     return origLoad.call(this, request, ...rest);
   };
   try {
+    // モックを差し込んだ状態で読み込むため、import ではなく実行時に require する
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require(EXT_PATH) as Extension;
   } finally {
     NodeModule._load = origLoad;

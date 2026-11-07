@@ -74,7 +74,9 @@ flowchart LR
 | `src/` | 本体（→ 4章）。役目ごとにファイルを分けている |
 | `out/` | `src/` のコンパイル結果。`package.json` の `main` はここを指す。git には入れない |
 | `tsconfig.json` | TypeScript の設定（`strict` で型を厳しくチェック） |
+| `eslint.config.mjs` | ESLint の設定（→ 9章） |
 | `.vscode/launch.json` / `tasks.json` | `F5` でコンパイルしてから拡張開発ホストを起動する設定 |
+| `.vscode/extensions.json` | このフォルダを開くと、ESLint 拡張を入れるよう案内する |
 | `README.md` | 使い方（GitHub のトップに表示される） |
 | `docs/ARCHITECTURE.md` | このファイル |
 | `LICENSE` | MIT ライセンス |
@@ -289,6 +291,9 @@ F5   # npm run compile をしてから拡張開発ホストが起動する（.vs
 npm run compile   # src/ → out/
 npm run watch     # 保存のたびにコンパイル
 
+# ESLint
+npm run lint      # await 忘れなどを調べる（CI でも実行する）
+
 # パッケージ化
 npm run package   # = vsce package。直前に vscode:prepublish でコンパイルされる
 
@@ -296,6 +301,13 @@ npm run package   # = vsce package。直前に vscode:prepublish でコンパイ
 ```
 
 配布用の VSIX は GitHub Actions（`.github/workflows/release.yml`）が作る。`v*` のタグを push すると、`package` ジョブ（読み取り権限のみ）がテストと VSIX 作成を行い、`release` ジョブ（書き込み権限あり・依存は入れない）が Releases に添付する。手順は README の「リリースの手順」を参照。
+
+ESLint（`eslint.config.mjs`）:
+
+- `typescript-eslint` の型情報を使うおすすめ一式（`recommendedTypeChecked`）だけを使い、ルールは増やしすぎない。
+- いちばんの目的は、`await` し忘れた Promise を見つけること（`no-floating-promises`）。VS Code の API は `Promise` ではなく `Thenable` を返すので、`checkThenables: true` を付けている（付けないと見逃す）。わざと待たない通知には `void` を付ける。
+- `node:test` の `describe` / `it` は Promise を返すが待たなくてよいので、このルールの対象から外している。
+- CI の `package` ジョブで、テストの前に `npm run lint` を実行する。
 
 安全のための設定:
 
@@ -356,8 +368,8 @@ npm run test:integration    # コンパイル → 統合テスト（初回はテ
 ### ポイント
 
 - **テストも TypeScript**: `src/test/` に置き、本体と一緒に `out/test/` にコンパイルする（公式の雛形と同じ形）。`reference.ts`・`constants.ts` は直接 import し、`extension.ts` はモックを差し込んでから読み込む（型だけは `typeof import('../../extension')` で使う）。テストのためだけの公開（以前の `_internal`）はない。
-- **`npm test` の流れ**: `out/` を消してからコンパイルし（`npm run build`。消したファイルが `out/` に残って動き続けるのを防ぐ）、`node --test "out/test/unit/**/*.test.js"` で実行する。ファイルの探し方を Node に任せるので、Node 21 以上が必要（CI は Node 22）。ユニットテストは Node 標準の `node:test`、統合テストは VS Code の中で `mocha` を使う。
-- **公式拡張の更新を検知**: `manifest.test.js` は `~/.vscode/extensions/anthropic.claude-code-*` の package.json を読み、呼んでいる `claude-vscode.insertAtMention` と `claude-vscode.focus` がまだ存在するかを確認する。公式拡張を更新した後に `npm test` を流せば、コマンド名の変更に気づける。見つからない環境ではスキップ（`CLAUDE_EXT_DIR` で場所を指定可能）。
+- **`npm test` の流れ**: `out/` を消してからコンパイルし（`npm run build`。消したファイルが `out/` に残って動き続けるのを防ぐ）、`node --test "out/test/unit/**/*.test.js"` で実行する。ファイルの探し方を Node に任せるので、Node 21 以上が必要。ユニットテストは Node 標準の `node:test`、統合テストは VS Code の中で `mocha` を使う。
+- **公式拡張の更新を検知**: `manifest.test.ts` は `~/.vscode/extensions/anthropic.claude-code-*` の package.json を読み、呼んでいる `claude-vscode.insertAtMention` と `claude-vscode.focus` がまだ存在するかを確認する。公式拡張を更新した後に `npm test` を流せば、コマンド名の変更に気づける。見つからない環境ではスキップ（`CLAUDE_EXT_DIR` で場所を指定可能）。
 - **統合テストは公式拡張なし**: テスト用VS Codeでは他の拡張を無効にするため、送信結果はクリップボードで確認する（フォールバック経路）。公式拡張のチャット欄に入るところは自動テストできないので、手動で確認する。
 - **テストの効き目を確認済み**: わざとバグを入れて（行番号の0始まり、コマンドID誤り、例外の握りつぶし、選択リセット削除、複数選択の無視、フォルダ名の欠落、メニュー条件の欠落 など9種類）すべて検出できることを確認した。ファイルを分けたあとにも、8 種類（行番号の0始まり、行末まで選んだときの行、フォルダの判定、フォルダの貼り付け、参照のつなぎ方、公式コマンドの失敗の握りつぶし、エクスプローラーでの失敗の無視、選択のリセット）で同じことを確かめた。
 
