@@ -112,7 +112,7 @@ describe('エクスプローラーからの送信（sendFile）', () => {
     assert.deepEqual(state.opened, ['/ws/project/a.js']);
     assert.equal(state.shown.length, 1);
     const o = state.shown[0].options;
-    assert.equal(o.preview, true);
+    assert.equal(o.preview, false); // プレビューで開くと、ユーザーのプレビューのタブを消してしまう
     assert.equal(o.preserveFocus, false);
     assert.ok(o.selection?.isEmpty);
     assert.equal(o.selection?.start.line, 0);
@@ -301,5 +301,74 @@ describe('エクスプローラーからの送信（sendFile）', () => {
     const { state, run } = setup({ claudeInstalled: false, workspaceFolders: ['/ws/alpha', '/ws/beta'] });
     await run('rightClickMention.sendFile', uri('/ws/beta/src/only-in-beta.js'));
     assert.equal(state.clipboard, '@beta/src/only-in-beta.js');
+  });
+});
+
+describe('エクスプローラーから送るときに開いたタブ', () => {
+  const A = uri('/ws/project/a.js');
+  const B = uri('/ws/project/b.js');
+  const tabPaths = (tabs: { input: { uri: { fsPath: string } } }[]) => tabs.map((t) => t.input.uri.fsPath);
+
+  it('参照を作るために開いたタブは、チャットに入れたあとで閉じる', async () => {
+    const { state, run } = setup();
+    await run('rightClickMention.sendFile', A);
+    assert.deepEqual(state.executed, [CMD]);
+    assert.deepEqual(state.closed, ['/ws/project/a.js']);
+    assert.deepEqual(state.tabs, []);
+  });
+
+  it('閉じるのは公式コマンドで入れたあと（入れる時点ではタブが開いている）', async () => {
+    const tabsAtInsert: string[][] = [];
+    const ctx: { state?: ReturnType<typeof setup>['state'] } = {};
+    const { state, run } = setup({
+      onExecute: (id) => {
+        if (id === CMD && ctx.state) tabsAtInsert.push(tabPaths(ctx.state.tabs));
+      },
+    });
+    ctx.state = state;
+    await run('rightClickMention.sendFile', A);
+    assert.deepEqual(tabsAtInsert, [['/ws/project/a.js']]);
+    assert.deepEqual(state.tabs, []);
+  });
+
+  it('もともと開いていたファイルのタブは閉じない', async () => {
+    const { state, run } = setup({ openTabs: ['/ws/project/a.js'] });
+    await run('rightClickMention.sendFile', A, [A, B]);
+    assert.deepEqual(state.executed, [CMD, CMD]);
+    assert.deepEqual(state.closed, ['/ws/project/b.js']);
+    assert.deepEqual(tabPaths(state.tabs), ['/ws/project/a.js']);
+  });
+
+  it('公式拡張が無くてコピーに回ったときも、開いたタブは閉じる', async () => {
+    const { state, run } = setup({ claudeInstalled: false });
+    await run('rightClickMention.sendFile', A, [A, B]);
+    assert.deepEqual(state.clipboardWrites, ['@a.js @b.js']);
+    assert.deepEqual(state.tabs, []);
+  });
+
+  it('タブを閉じられなくても、残りのファイルは送る', async () => {
+    const { state, run } = setup({ closeFails: true });
+    await assert.doesNotReject(run('rightClickMention.sendFile', A, [A, B]));
+    assert.deepEqual(state.executed, [CMD, CMD]);
+  });
+
+  it('フォルダとテキストで開けないファイルは開かないので、タブには触らない', async () => {
+    const SRC = uri('/ws/project/src');
+    const IMG = uri('/ws/project/logo.png');
+    const { state, run } = setup({
+      openTabs: ['/ws/project/other.js'],
+      isFolder: (p) => p === '/ws/project/src',
+      isBinary: (p) => p.endsWith('.png'),
+    });
+    await run('rightClickMention.sendFile', SRC, [SRC, IMG]);
+    assert.deepEqual(state.closed, []);
+    assert.deepEqual(tabPaths(state.tabs), ['/ws/project/other.js']);
+  });
+
+  it('エディタの右クリックでは、タブを閉じない', async () => {
+    const { vscode, state, run } = setup({ openTabs: ['/ws/project/a.js'] });
+    vscode.window.activeTextEditor = makeEditor('/ws/project/a.js', makeSelection(1, 0, 3, 2));
+    await run('rightClickMention.sendSelection');
+    assert.deepEqual(state.closed, []);
   });
 });

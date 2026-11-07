@@ -28,12 +28,39 @@ export async function openAsActiveEditor(uri: vscode.Uri): Promise<vscode.TextEd
   try {
     const document = await vscode.workspace.openTextDocument(uri);
     return await vscode.window.showTextDocument(document, {
-      preview: true,
+      // プレビューで開くと、ユーザーがプレビューで開いていた別のタブを置き換えて消してしまう
+      preview: false,
       preserveFocus: false,
       selection: new vscode.Range(0, 0, 0, 0),
     });
   } catch (err) {
     console.error(LOG_PREFIX, err);
     return undefined;
+  }
+}
+
+function tabsOf(uri: vscode.Uri): vscode.Tab[] {
+  const key = uri.toString();
+  return vscode.window.tabGroups.all
+    .flatMap((group) => group.tabs)
+    .filter((tab) => tab.input instanceof vscode.TabInputText && tab.input.uri.toString() === key);
+}
+
+/** そのファイルのタブがどこかに開いているか */
+export function isOpenInTab(uri: vscode.Uri): boolean {
+  return tabsOf(uri).length > 0;
+}
+
+/**
+ * そのファイルのタブを閉じる
+ * 閉じられなくても、参照を届ける処理は続ける
+ */
+export async function closeTabs(uri: vscode.Uri): Promise<void> {
+  const tabs = tabsOf(uri);
+  if (tabs.length === 0) return;
+  try {
+    await vscode.window.tabGroups.close(tabs, true);
+  } catch (err) {
+    console.error(LOG_PREFIX, err);
   }
 }

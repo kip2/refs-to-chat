@@ -144,7 +144,7 @@ flowchart TD
 | `commands.ts` | `addActiveEditorToChat()`: エディタの右クリック。公式コマンドで入れ、入れられなければ `deliverDeferredReferences` に渡す<br/>`addExplorerItemsToChat(clicked, selected)`: エクスプローラーの右クリック。ファイルは開いて公式コマンドで入れる。入れられなかったもの（フォルダ・開けないファイル・失敗）は `{ ref, reason }` として後回しにし、最後にまとめて `deliverDeferredReferences` に渡す |
 | `claudeChat.ts` | `isClaudeInstalled()`<br/>`insertActiveEditorMention()`: 公式コマンドを呼ぶ。入れられなかった理由（`notInstalled` / `failed`）を返す<br/>`pasteClipboardIntoChat()`: `claude-vscode.focus` → 少し待つ → 標準の貼り付け |
 | `fallback.ts` | `FallbackReason`（理由の種類）と表示文、`DeferredReference`（`{ ref, reason }`）<br/>`deliverDeferredReferences(deferred)`: 貼り付けるかコピーするかをここだけで決める。公式拡張があり、理由がフォルダ・開けないファイルだけなら貼り付け（お知らせ 1 回）。それ以外はコピー（警告 1 回）。公式拡張が無ければ、その理由も警告に足す |
-| `workspace.ts` | `workspacePath(uri)`: 公式と同じ形式のパス<br/>`isFolder(uri)`: `workspace.fs.stat` で判定（シンボリックリンクのフォルダも含む。調べられなければファイル扱い）<br/>`openAsActiveEditor(uri)`: 選択なしで開いてアクティブにする。開けない・表示できなければ `undefined` |
+| `workspace.ts` | `workspacePath(uri)`: 公式と同じ形式のパス<br/>`isFolder(uri)`: `workspace.fs.stat` で判定（シンボリックリンクのフォルダも含む。調べられなければファイル扱い）<br/>`openAsActiveEditor(uri)`: 選択なしで開いてアクティブにする（プレビューにしない）。開けない・表示できなければ `undefined`<br/>`isOpenInTab(uri)` / `closeTabs(uri)`: タブが開いているか調べる / 閉じる（`tabGroups` を使う） |
 | `reference.ts` | `fileReference(path, selection?)`: `@path` / `@path#8` / `@path#5-10`<br/>`folderReference(path)`: `@path/`<br/>`joinReferences(refs)`: 空白でつなぐ |
 | `constants.ts` | `COMMANDS`（この拡張のコマンド ID）、`CLAUDE`（公式拡張の ID とコマンド）、`PASTE_COMMAND`、`FOCUS_WAIT_MS`、`LOG_PREFIX` |
 
@@ -227,6 +227,12 @@ sequenceDiagram
 ```
 
 ファイルを一度エディタで開くのは、公式コマンドが「アクティブなエディタ」からしか参照を作れないため（URIを引数で渡す口がない）。
+
+開いたタブの扱い:
+
+- 開く前にタブが開いているかを調べ、この拡張が開いたものだけ、公式コマンドで入れたあと（入れられずコピーに回ったときも）すぐ閉じる。もともと開いていたタブは残す。
+- プレビュー（斜体のタブ）では開かない。プレビューで開くと、ユーザーがプレビューで開いていた別のファイルのタブを置き換えて消してしまうため。どうせ閉じるので、タブは残らない。
+- もともと開いていたファイルは、選択を先頭に戻してから送る（公式コマンドが選択範囲を参照に含めてしまうため）。
 
 ### 5-3. フォールバックの判断
 
@@ -353,10 +359,10 @@ flowchart LR
 | `src/test/helpers/vscodeMock.ts` | VS Code API のモック。`asRelativePath` のマルチルート挙動、`Selection` の正規化、バイナリで開けないファイルなどを再現。`setup()` でモック＋拡張＋activate を一度に用意（`out/` のファイルは毎回読み込み直す） | — |
 | `src/test/unit/reference.test.ts` | 行番号（1行・複数行・次行先頭で終わる・逆方向選択）、フォルダの `/`、空白でつなぐ。`reference.ts` をモックなしで直接 import する | 12 |
 | `src/test/unit/workspacePath.test.ts` | パス形式（単一・マルチルート・別の場所・入れ子・ワークスペース外）。コマンドを実行し、コピーされた参照で確かめる | 6 |
-| `src/test/unit/commands.test.ts` | コマンド登録と dispose、`extension.ts` が activate / deactivate だけを出すこと、送信の分岐（成功・拡張なし・例外・reject）、エクスプローラー（単一・複数・空・引数なし・バイナリ混在・フォルダの貼り付け・貼り付け失敗・拡張なし・ファイルとフォルダの混在・コピーと警告を 1 回にまとめる・同じ理由を 1 回だけ書く）、失敗の経路（フォーカス後の貼り付け失敗・フォルダか調べられない・エディタで表示できない・シンボリックリンクのフォルダ） | 32 |
+| `src/test/unit/commands.test.ts` | コマンド登録と dispose、`extension.ts` が activate / deactivate だけを出すこと、送信の分岐（成功・拡張なし・例外・reject）、エクスプローラー（単一・複数・空・引数なし・バイナリ混在・フォルダの貼り付け・貼り付け失敗・拡張なし・ファイルとフォルダの混在・コピーと警告を 1 回にまとめる・同じ理由を 1 回だけ書く）、失敗の経路（フォーカス後の貼り付け失敗・フォルダか調べられない・エディタで表示できない・シンボリックリンクのフォルダ）、開いたタブを閉じる（入れたあとで閉じる・もともと開いていたものは残す・コピーに回っても閉じる・閉じられなくても続ける・フォルダなどは触らない・エディタの右クリックでは閉じない） | 39 |
 | `src/test/unit/manifest.test.ts` | package.json の基本項目と category、宣言とコード（`COMMANDS`）の一致、メニューの `when` 条件、制限モードの宣言、公式拡張にコマンドが存在するか | 17 |
 | `src/test/integration/runTest.ts` | `@vscode/test-electron` でテスト用VS Codeを起動（他の拡張は無効） | — |
-| `src/test/integration/suite/extension.itest.ts` | 実VS Code上でマルチルートのパス、選択の扱い、エクスプローラー送信、バイナリファイル、フォルダの判定、ファイルとフォルダの混在 | 16 |
+| `src/test/integration/suite/extension.itest.ts` | 実VS Code上でマルチルートのパス、選択の扱い、エクスプローラー送信、開いたタブを閉じる・もともと開いていたタブを残す・プレビューのタブを消さない、バイナリファイル、フォルダの判定、ファイルとフォルダの混在 | 18 |
 | `src/test/fixtures/multi-root/` | 統合テスト用ワークスペース（同名の `app.js` を持つ alpha / beta、バイナリファイル） | — |
 
 ### 実行方法

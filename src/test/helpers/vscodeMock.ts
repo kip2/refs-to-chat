@@ -78,6 +78,19 @@ export interface MockOptions {
   statFails?: PathPredicate;
   /** showTextDocument が失敗するファイル */
   showFails?: PathPredicate;
+  /** 最初からタブが開いているファイル */
+  openTabs?: string[];
+  /** tabGroups.close が失敗する */
+  closeFails?: boolean;
+}
+
+/** VS Code の TabInputText（テキストエディタのタブ） */
+export class TabInputText {
+  constructor(readonly uri: MockUri) {}
+}
+
+interface MockTab {
+  input: TabInputText;
 }
 
 type Handler = (...args: unknown[]) => unknown;
@@ -95,6 +108,10 @@ export interface MockState {
   opened: string[];
   /** showTextDocument に渡されたもの */
   shown: { fsPath: string; options: { preview?: boolean; preserveFocus?: boolean; selection?: Range } }[];
+  /** 今開いているタブ */
+  tabs: MockTab[];
+  /** tabGroups.close で閉じたファイルのパス */
+  closed: string[];
 }
 
 export function createVscodeMock(opts: MockOptions = {}) {
@@ -113,7 +130,10 @@ export function createVscodeMock(opts: MockOptions = {}) {
     registered: new Map(),
     opened: [],
     shown: [],
+    tabs: (opts.openTabs ?? []).map((p) => ({ input: new TabInputText(uri(p)) })),
+    closed: [],
   };
+  const hasTab = (u: MockUri) => state.tabs.some((t) => t.input.uri.toString() === u.toString());
 
   const FileType = { Unknown: 0, File: 1, Directory: 2, SymbolicLink: 64 };
   const is = (pred: PathPredicate | undefined, p: string) => Boolean(pred?.(p));
@@ -122,6 +142,7 @@ export function createVscodeMock(opts: MockOptions = {}) {
     Range,
     Position,
     FileType,
+    TabInputText,
     workspace: {
       workspaceFolders: folders,
       fs: {
@@ -156,9 +177,23 @@ export function createVscodeMock(opts: MockOptions = {}) {
       async showTextDocument(doc: MockDocument, options: MockState['shown'][number]['options']) {
         state.shown.push({ fsPath: doc.uri.fsPath, options });
         if (is(opts.showFails, doc.uri.fsPath)) throw new Error('Could not open editor');
+        if (!hasTab(doc.uri)) state.tabs.push({ input: new TabInputText(doc.uri) });
         const editor: MockEditor = { document: doc, selection: options.selection ?? new Range(0, 0, 0, 0) };
         vscode.window.activeTextEditor = editor;
         return editor;
+      },
+      tabGroups: {
+        get all() {
+          return [{ tabs: state.tabs }];
+        },
+        async close(tabs: MockTab | MockTab[]) {
+          if (opts.closeFails) throw new Error('Could not close tab');
+          for (const tab of Array.isArray(tabs) ? tabs : [tabs]) {
+            state.tabs = state.tabs.filter((t) => t !== tab);
+            state.closed.push(tab.input.uri.fsPath);
+          }
+          return true;
+        },
       },
       // 本物と同じく Thenable を返す（本物はユーザーが閉じるまで解決しない）
       showWarningMessage: (m: string) => {

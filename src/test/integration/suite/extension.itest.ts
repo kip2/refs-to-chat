@@ -25,6 +25,13 @@ async function openWithSelection(uri: vscode.Uri, sl: number, sc: number, el: nu
 
 const clipboard = () => vscode.env.clipboard.readText();
 
+/** そのファイルのタブがどこかに開いているか */
+function hasTab(uri: vscode.Uri): boolean {
+  return vscode.window.tabGroups.all
+    .flatMap((g) => g.tabs)
+    .some((t) => t.input instanceof vscode.TabInputText && t.input.uri.toString() === uri.toString());
+}
+
 describe('Right Click Mention（実VS Code・マルチルート）', function () {
   before(async function () {
     const ext = vscode.extensions.getExtension(EXT_ID);
@@ -96,14 +103,28 @@ describe('Right Click Mention（実VS Code・マルチルート）', function ()
   });
 
   describe('エクスプローラーからの送信', function () {
-    it('1ファイル → 開いて選択なしで送る', async function () {
+    it('1ファイル → 開いて選択なしで送り、開いたタブは閉じる', async function () {
       const uri = fileIn('beta', 'src/only-in-beta.js');
       await vscode.commands.executeCommand('rightClickMention.sendFile', uri, [uri]);
       assert.strictEqual(await clipboard(), '@beta/src/only-in-beta.js');
-      const ed = vscode.window.activeTextEditor;
-      assert.ok(ed);
-      assert.strictEqual(ed.document.uri.toString(), uri.toString());
-      assert.ok(ed.selection.isEmpty);
+      assert.strictEqual(hasTab(uri), false);
+    });
+
+    it('もともと開いていたファイルは、送ったあともタブが残る', async function () {
+      const uri = fileIn('alpha', 'src/app.js');
+      await openWithSelection(uri, 0, 0, 0, 0);
+      await vscode.commands.executeCommand('rightClickMention.sendFile', uri, [uri]);
+      assert.strictEqual(await clipboard(), '@alpha/src/app.js');
+      assert.strictEqual(hasTab(uri), true);
+    });
+
+    it('プレビューで開いていた別のファイルのタブを消さない', async function () {
+      const other = fileIn('beta', 'src/app.js');
+      await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(other), { preview: true });
+      const uri = fileIn('alpha', 'src/app.js');
+      await vscode.commands.executeCommand('rightClickMention.sendFile', uri, [uri]);
+      assert.strictEqual(hasTab(other), true);
+      assert.strictEqual(hasTab(uri), false);
     });
 
     it('前回の選択が残っているファイルでも、選択なしで送る', async function () {
@@ -114,12 +135,13 @@ describe('Right Click Mention（実VS Code・マルチルート）', function ()
       assert.strictEqual(await clipboard(), '@alpha/src/app.js');
     });
 
-    it('複数選択 → 順に処理し、参照はまとめてコピー。最後のファイルが開いて残る', async function () {
+    it('複数選択 → 順に処理し、参照はまとめてコピー。開いたタブは残らない', async function () {
       const a = fileIn('alpha', 'src/app.js');
       const b = fileIn('beta', 'src/only-in-beta.js');
       await vscode.commands.executeCommand('rightClickMention.sendFile', a, [a, b]);
       assert.strictEqual(await clipboard(), '@alpha/src/app.js @beta/src/only-in-beta.js');
-      assert.strictEqual(vscode.window.activeTextEditor?.document.uri.toString(), b.toString());
+      assert.strictEqual(hasTab(a), false);
+      assert.strictEqual(hasTab(b), false);
     });
 
     it('バイナリファイル → 開かずに @path をコピー', async function () {

@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import { insertActiveEditorMention } from './claudeChat';
 import { type DeferredReference, deliverDeferredReferences } from './fallback';
 import { fileReference, folderReference } from './reference';
-import { isFolder, openAsActiveEditor, workspacePath } from './workspace';
+import { closeTabs, isFolder, isOpenInTab, openAsActiveEditor, workspacePath } from './workspace';
 
 /** エディタの右クリック（選択範囲あり・なし共通） */
 export async function addActiveEditorToChat(): Promise<void> {
@@ -41,6 +41,7 @@ export async function addExplorerItemsToChat(
       continue;
     }
 
+    const wasOpen = isOpenInTab(uri);
     const editor = await openAsActiveEditor(uri);
     if (!editor) {
       deferred.push({ ref: fileReference(workspacePath(uri)), reason: 'notText' });
@@ -49,6 +50,9 @@ export async function addExplorerItemsToChat(
 
     const failure = await insertActiveEditorMention();
     if (failure) deferred.push({ ref: fileReference(workspacePath(editor.document.uri)), reason: failure });
+
+    // 参照を作るためだけに開いたタブは閉じる（もともと開いていたものは残す）
+    if (!wasOpen) await closeTabs(editor.document.uri);
   }
 
   await deliverDeferredReferences(deferred);
