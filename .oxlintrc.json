@@ -1,13 +1,12 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript"],
   "options": {
     "typeAware": true
   },
   "categories": {
     "correctness": "error"
   },
-  "ignorePatterns": ["out/**", "node_modules/**", ".vscode-test/**", "src/test/fixtures/**"],
+  "ignorePatterns": ["out/**", ".vscode-test/**", "src/test/fixtures/**"],
   "rules": {
     "typescript/no-floating-promises": [
       "error",
@@ -15,6 +14,7 @@
         "checkThenables": true,
         "allowForKnownSafeCalls": [{ "from": "package", "package": "node:test", "name": ["describe", "it"] }]
       }
-    ]
+    ],
+    "typescript/no-misused-promises": "error"
   }
 }

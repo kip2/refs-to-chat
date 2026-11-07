@@ -118,6 +118,18 @@ describe('Right Click Mention（実VS Code・マルチルート）', function ()
       assert.strictEqual(hasTab(uri), true);
     });
 
+    it('もともと開いていたファイルは、選択範囲を消さずに送り、あとで元に戻す', async function () {
+      const uri = fileIn('alpha', 'src/app.js');
+      const editor = await openWithSelection(uri, 1, 0, 2, 3);
+      // 行の長さに合わせて VS Code が詰めることがあるので、送る前の選択を覚えておく
+      const before = editor.selection;
+      assert.ok(!before.isEmpty);
+      await vscode.commands.executeCommand('rightClickMention.sendFile', uri, [uri]);
+      // 選択範囲があっても、エクスプローラーからはファイル全体の参照になる
+      assert.strictEqual(await clipboard(), '@alpha/src/app.js');
+      assert.ok(editor.selection.isEqual(before));
+    });
+
     it('プレビューで開いていた別のファイルのタブを消さない', async function () {
       const other = fileIn('beta', 'src/app.js');
       await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(other), { preview: true });

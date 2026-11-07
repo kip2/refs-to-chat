@@ -3,6 +3,7 @@
 import * as assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import { CLAUDE, PASTE_COMMAND } from '../../constants';
+import { MESSAGES, REASON_MESSAGES as R } from '../../messages';
 import { makeEditor, makeSelection, setup, uri } from '../helpers/vscodeMock';
 
 // constants.ts から読まずに直書きしているのは、ID が勝手に変わったら気づけるようにするため
@@ -79,7 +80,7 @@ describe('エディタからの送信（sendSelection / sendCurrentFile）', () 
     assert.deepEqual(state.executed, []);
     assert.equal(state.clipboard, '@src/app.ts#5-10');
     assert.equal(state.warnings.length, 1);
-    assert.match(state.warnings[0], /見つかりません/);
+    assert.ok(state.warnings[0].includes(R.notInstalled));
     assert.match(state.warnings[0], /@src\/app\.ts#5-10/);
   });
 
@@ -90,7 +91,7 @@ describe('エディタからの送信（sendSelection / sendCurrentFile）', () 
     await assert.doesNotReject(run('rightClickMention.sendSelection'));
     assert.deepEqual(state.executed, [CMD]);
     assert.equal(state.clipboard, '@src/app.ts#1');
-    assert.match(state.warnings[0], /失敗/);
+    assert.ok(state.warnings[0].includes(R.failed));
   });
 
   it('マルチルートのフォールバックはフォルダ名付き', async () => {
@@ -106,17 +107,23 @@ describe('エクスプローラーからの送信（sendFile）', () => {
   const B = uri('/ws/project/b.js');
   const IMG = uri('/ws/project/logo.png');
 
-  it('1ファイル: 開いて（選択なし・フォーカスあり）公式コマンドを呼ぶ', async () => {
-    const { state, run } = setup();
+  it('1ファイル: 開いて（フォーカスあり）、選択が空の状態で公式コマンドを呼ぶ', async () => {
+    const emptyAtInsert: boolean[] = [];
+    const ctx: { vscode?: ReturnType<typeof setup>['vscode'] } = {};
+    const { vscode, state, run } = setup({
+      onExecute: (id) => {
+        if (id === CMD) emptyAtInsert.push(Boolean(ctx.vscode?.window.activeTextEditor?.selection.isEmpty));
+      },
+    });
+    ctx.vscode = vscode;
     await run('rightClickMention.sendFile', A, undefined);
     assert.deepEqual(state.opened, ['/ws/project/a.js']);
     assert.equal(state.shown.length, 1);
     const o = state.shown[0].options;
     assert.equal(o.preview, false); // プレビューで開くと、ユーザーのプレビューのタブを消してしまう
     assert.equal(o.preserveFocus, false);
-    assert.ok(o.selection?.isEmpty);
-    assert.equal(o.selection?.start.line, 0);
     assert.deepEqual(state.executed, [CMD]);
+    assert.deepEqual(emptyAtInsert, [true]);
   });
 
   it('複数選択: 選択した順にすべて送る（右クリックしたファイルは重複させない）', async () => {
@@ -151,7 +158,7 @@ describe('エクスプローラーからの送信（sendFile）', () => {
     assert.deepEqual(state.executed, [FOCUS, PASTE]);
     assert.equal(state.clipboard, '@logo.png');
     assert.deepEqual(state.warnings, []);
-    assert.match(state.infos[0], /チャットに貼り付けました/);
+    assert.equal(state.infos[0], MESSAGES.pasted('@logo.png'));
   });
 
   it('開けないファイルが混ざっても残りは送り、開けないものは最後に貼り付ける', async () => {
@@ -161,13 +168,13 @@ describe('エクスプローラーからの送信（sendFile）', () => {
     assert.deepEqual(state.clipboardWrites, ['@logo.png']);
   });
 
-  it('開けたファイルで公式コマンドが失敗 →「送信に失敗」として扱い、「開けない」と取り違えない', async () => {
+  it('開けたファイルで公式コマンドが失敗 →「追加できなかった」として扱い、「開けない」と取り違えない', async () => {
     const { state, run } = setup({ onExecute: () => { throw new Error('boom'); } });
     await run('rightClickMention.sendFile', A);
     assert.deepEqual(state.clipboardWrites, ['@a.js']);
     assert.equal(state.warnings.length, 1);
-    assert.match(state.warnings[0], /送信に失敗/);
-    assert.doesNotMatch(state.warnings[0], /テキストとして開けない/);
+    assert.ok(state.warnings[0].includes(R.failed));
+    assert.ok(!state.warnings[0].includes(R.notText));
   });
 
   it('Claude拡張が無い → 全部の参照をまとめて 1 回でコピーし、警告も 1 回', async () => {
@@ -175,7 +182,7 @@ describe('エクスプローラーからの送信（sendFile）', () => {
     await run('rightClickMention.sendFile', A, [A, B]);
     assert.deepEqual(state.clipboardWrites, ['@a.js @b.js']);
     assert.equal(state.warnings.length, 1);
-    assert.match(state.warnings[0], /Claude Code拡張が見つかりません/);
+    assert.ok(state.warnings[0].includes(R.notInstalled));
   });
 
   it('フォルダ → @src/ をコピーし、入力欄にフォーカスして貼り付ける（ファイルとしては開かない）', async () => {
@@ -199,7 +206,7 @@ describe('エクスプローラーからの送信（sendFile）', () => {
     await run('rightClickMention.sendFile', SRC);
     assert.equal(state.clipboard, '@src/');
     assert.equal(state.warnings.length, 1);
-    assert.match(state.warnings[0], /フォルダ/);
+    assert.ok(state.warnings[0].includes(R.folder));
     assert.deepEqual(state.infos, []);
   });
 
@@ -223,7 +230,7 @@ describe('エクスプローラーからの送信（sendFile）', () => {
     assert.deepEqual(state.executed, []);
     assert.deepEqual(state.clipboardWrites, ['@src/']);
     assert.equal(state.warnings.length, 1);
-    assert.match(state.warnings[0], /Claude Code拡張が見つかりません/);
+    assert.ok(state.warnings[0].includes(R.notInstalled));
   });
 
   it('フォルダへのシンボリックリンクもフォルダとして扱う', async () => {
@@ -261,7 +268,7 @@ describe('エクスプローラーからの送信（sendFile）', () => {
     });
     await run('rightClickMention.sendFile', SRC, [SRC, A, DOCS]);
     const reasons = state.warnings[0].split('。').slice(0, -1);
-    assert.deepEqual(reasons, ['Claude Code拡張が見つかりません', 'フォルダはチャットに直接入れられません']);
+    assert.deepEqual(reasons, [R.notInstalled, R.folder]);
   });
 
   it('ファイルとフォルダの混在 → ファイルは送り、フォルダだけまとめてコピー', async () => {
@@ -285,9 +292,18 @@ describe('エクスプローラーからの送信（sendFile）', () => {
     await run('rightClickMention.sendFile', A, [A, SRC, IMG]);
     assert.deepEqual(state.clipboardWrites, ['@a.js @src/ @logo.png']);
     assert.equal(state.warnings.length, 1);
-    assert.match(state.warnings[0], /Claude Code拡張が見つかりません/);
-    assert.match(state.warnings[0], /フォルダ/);
-    assert.match(state.warnings[0], /テキストとして開けない/);
+    assert.ok(state.warnings[0].includes(R.notInstalled));
+    assert.ok(state.warnings[0].includes(R.folder));
+    assert.ok(state.warnings[0].includes(R.notText));
+  });
+
+  it('名前に改行などを含む参照は、貼り付けずにコピーだけする（貼り付けがターミナルに入ると危ない）', async () => {
+    const ODD = uri('/ws/project/odd\nname');
+    const { state, run } = setup({ isFolder: (p) => p === '/ws/project/odd\nname' });
+    await run('rightClickMention.sendFile', ODD);
+    assert.deepEqual(state.executed, []); // フォーカスも貼り付けも呼ばない
+    assert.deepEqual(state.clipboardWrites, ['@odd\nname/']);
+    assert.equal(state.warnings.length, 1);
   });
 
   it('全部チャットに送れたら、クリップボードには触らない', async () => {
@@ -346,10 +362,63 @@ describe('エクスプローラーから送るときに開いたタブ', () => {
     assert.deepEqual(state.tabs, []);
   });
 
-  it('タブを閉じられなくても、残りのファイルは送る', async () => {
+  it('タブを閉じられなくても、残りのファイルは送る（タブは残り、通知もコピーもしない）', async () => {
     const { state, run } = setup({ closeFails: true });
     await assert.doesNotReject(run('rightClickMention.sendFile', A, [A, B]));
     assert.deepEqual(state.executed, [CMD, CMD]);
+    assert.deepEqual(state.closed, []);
+    assert.deepEqual(tabPaths(state.tabs), ['/ws/project/a.js', '/ws/project/b.js']);
+    assert.deepEqual(state.warnings, []);
+    assert.deepEqual(state.clipboardWrites, []);
+  });
+
+  it('タブを閉じるときは、フォーカスを今の場所に保つ', async () => {
+    const { state, run } = setup();
+    await run('rightClickMention.sendFile', A);
+    assert.deepEqual(state.closePreserveFocus, [true]);
+  });
+
+  it('別のエディタグループにだけ開いていたファイルは、今のグループにできたタブを閉じる', async () => {
+    const { state, run } = setup({ otherGroupTabs: ['/ws/project/a.js'] });
+    await run('rightClickMention.sendFile', A);
+    assert.deepEqual(state.tabs, []);
+    assert.deepEqual(tabPaths(state.otherTabs), ['/ws/project/a.js']);
+  });
+
+  it('パスの大文字小文字だけ違っても、もともと開いていたタブは閉じない（Windows）', async () => {
+    // エクスプローラーからは小文字、開いているドキュメントは大文字の App.ts
+    const { state, run } = setup({
+      openTabs: ['/ws/project/App.ts'],
+      documentPath: (p) => (p.toLowerCase() === '/ws/project/app.ts' ? '/ws/project/App.ts' : p),
+    });
+    await run('rightClickMention.sendFile', uri('/ws/project/app.ts'));
+    assert.deepEqual(state.closed, []);
+    assert.deepEqual(tabPaths(state.tabs), ['/ws/project/App.ts']);
+  });
+
+  it('もともと開いていたファイルは、送ったあとで選択（カーソル位置）を元に戻す', async () => {
+    const sel = makeSelection(4, 2, 9, 7);
+    const { state, run } = setup({ openTabs: ['/ws/project/a.js'], selections: { '/ws/project/a.js': sel } });
+    await run('rightClickMention.sendFile', A);
+    const editor = state.editors.get('/ws/project/a.js');
+    assert.ok(editor);
+    assert.deepEqual(editor.selections, [sel]);
+  });
+
+  it('公式コマンドを呼ぶときは、カーソル位置で選択を空にしている（先頭に飛ばさない）', async () => {
+    const seen: { empty: boolean; line: number }[] = [];
+    const ctx: { vscode?: ReturnType<typeof setup>['vscode'] } = {};
+    const { vscode, run } = setup({
+      openTabs: ['/ws/project/a.js'],
+      selections: { '/ws/project/a.js': makeSelection(4, 2, 9, 7) },
+      onExecute: (id) => {
+        const sel = ctx.vscode?.window.activeTextEditor?.selection;
+        if (id === CMD && sel) seen.push({ empty: sel.isEmpty, line: sel.start.line });
+      },
+    });
+    ctx.vscode = vscode;
+    await run('rightClickMention.sendFile', A);
+    assert.deepEqual(seen, [{ empty: true, line: 9 }]);
   });
 
   it('フォルダとテキストで開けないファイルは開かないので、タブには触らない', async () => {

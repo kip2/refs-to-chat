@@ -3,14 +3,15 @@
 import * as vscode from 'vscode';
 import { insertActiveEditorMention } from './claudeChat';
 import { type DeferredReference, deliverDeferredReferences } from './fallback';
+import { MESSAGES } from './messages';
 import { fileReference, folderReference } from './reference';
-import { closeTabs, isFolder, isOpenInTab, openAsActiveEditor, workspacePath } from './workspace';
+import { isFolder, openForMention, workspacePath } from './workspace';
 
 /** エディタの右クリック（選択範囲あり・なし共通） */
 export async function addActiveEditorToChat(): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
-    void vscode.window.showInformationMessage('アクティブなエディタがありません。');
+    void vscode.window.showInformationMessage(MESSAGES.noEditor);
     return;
   }
 
@@ -41,18 +42,17 @@ export async function addExplorerItemsToChat(
       continue;
     }
 
-    const wasOpen = isOpenInTab(uri);
-    const editor = await openAsActiveEditor(uri);
-    if (!editor) {
+    const opened = await openForMention(uri);
+    if (!opened) {
       deferred.push({ ref: fileReference(workspacePath(uri)), reason: 'notText' });
       continue;
     }
 
     const failure = await insertActiveEditorMention();
-    if (failure) deferred.push({ ref: fileReference(workspacePath(editor.document.uri)), reason: failure });
+    if (failure) deferred.push({ ref: fileReference(workspacePath(uri)), reason: failure });
 
-    // 参照を作るためだけに開いたタブは閉じる（もともと開いていたものは残す）
-    if (!wasOpen) await closeTabs(editor.document.uri);
+    // 参照を作るためだけに開いたタブは閉じ、もともと開いていたものは選択を戻す
+    await opened.finish();
   }
 
   await deliverDeferredReferences(deferred);

@@ -1,3 +1,5 @@
+// パスの変換、フォルダの判定、参照を作るためにファイルを開く・閉じる処理
+
 import * as vscode from 'vscode';
 import { LOG_PREFIX } from './constants';
 
@@ -19,44 +21,58 @@ export async function isFolder(uri: vscode.Uri): Promise<boolean> {
   }
 }
 
+export interface OpenedForMention {
+  readonly editor: vscode.TextEditor;
+  /** 選択を元に戻し、この拡張が開いたタブなら閉じる */
+  finish(): Promise<void>;
+}
+
 /**
- * 選択なしで開いてアクティブにする
- * 公式コマンドがアクティブなエディタから参照を作るため
+ * 公式コマンドが参照を作れるよう、ファイルをアクティブなエディタにして、選択を空にする
+ * 公式コマンドはアクティブなエディタから参照を作り、選択範囲があると行番号を付けるため
  * 画像など、開けなければ undefined
  */
-export async function openAsActiveEditor(uri: vscode.Uri): Promise<vscode.TextEditor | undefined> {
+export async function openForMention(uri: vscode.Uri): Promise<OpenedForMention | undefined> {
   try {
     const document = await vscode.workspace.openTextDocument(uri);
-    return await vscode.window.showTextDocument(document, {
+    // ドキュメント自身の URI で調べる
+    // Windows でパスの大文字小文字が違っても、同じファイルなら同じドキュメントが返る
+    const hadTab = vscode.window.tabGroups.activeTabGroup.tabs.some((tab) => isTabOf(tab, document.uri));
+
+    const editor = await vscode.window.showTextDocument(document, {
       // プレビューで開くと、ユーザーがプレビューで開いていた別のタブを置き換えて消してしまう
       preview: false,
       preserveFocus: false,
-      selection: new vscode.Range(0, 0, 0, 0),
     });
+    const group = vscode.window.tabGroups.activeTabGroup;
+
+    // カーソルは動かさず、選択だけを空にする
+    const original = editor.selections;
+    const cursor = editor.selection.active;
+    editor.selection = new vscode.Selection(cursor, cursor);
+
+    return {
+      editor,
+      finish: async () => {
+        if (hadTab) {
+          editor.selections = original;
+          return;
+        }
+        await closeTabs(group.tabs.filter((tab) => isTabOf(tab, document.uri)));
+      },
+    };
   } catch (err) {
     console.error(LOG_PREFIX, err);
     return undefined;
   }
 }
 
-function tabsOf(uri: vscode.Uri): vscode.Tab[] {
-  const key = uri.toString();
-  return vscode.window.tabGroups.all
-    .flatMap((group) => group.tabs)
-    .filter((tab) => tab.input instanceof vscode.TabInputText && tab.input.uri.toString() === key);
+function isTabOf(tab: vscode.Tab, uri: vscode.Uri): boolean {
+  return tab.input instanceof vscode.TabInputText && tab.input.uri.toString() === uri.toString();
 }
 
-/** そのファイルのタブがどこかに開いているか */
-export function isOpenInTab(uri: vscode.Uri): boolean {
-  return tabsOf(uri).length > 0;
-}
-
-/**
- * そのファイルのタブを閉じる
- * 閉じられなくても、参照を届ける処理は続ける
- */
-export async function closeTabs(uri: vscode.Uri): Promise<void> {
-  const tabs = tabsOf(uri);
+// 閉じられなくても、参照を届ける処理は続ける
+async function closeTabs(tabs: vscode.Tab[]): Promise<void> {
   if (tabs.length === 0) return;
   try {
     await vscode.window.tabGroups.close(tabs, true);

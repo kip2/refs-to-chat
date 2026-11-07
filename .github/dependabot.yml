@@ -1,6 +1,7 @@
 # 依存の更新を、GitHub が自動で PR にして知らせる
-# - github-actions: release.yml で SHA 固定している Action の新しい版
-# - npm: devDependencies（TypeScript・vsce・テスト用のツール）の新しい版
+# - github-actions: release.yml・ci.yml で SHA 固定している Action の新しい版
+# - npm: devDependencies（TypeScript・Oxlint・vsce・テスト用のツール）の新しい版
+# どちらも、公開されてから 7 日たった版だけを提案する（出た直後に乗っ取られた版を取り込まないように）
 # PR を作るだけで、マージはしない
 # 中身を見てから自分でマージする
 version: 2
@@ -9,6 +10,8 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ['*']
@@ -17,6 +20,8 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     groups:
       dev-dependencies:
         dependency-type: development

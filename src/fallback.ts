@@ -1,8 +1,9 @@
-// 公式コマンドでチャットに入れられなかった参照を、まとめて貼り付けるかコピーする
+// 公式コマンドで入れられなかった参照を、最後にまとめて貼り付けかコピーで届ける
 // 複数あっても、クリップボードへの書き込みと通知は 1 回にまとめる
 
 import * as vscode from 'vscode';
 import { type InsertFailure, isClaudeInstalled, pasteClipboardIntoChat } from './claudeChat';
+import { MESSAGES, REASON_MESSAGES } from './messages';
 import { joinReferences } from './reference';
 
 export type FallbackReason = InsertFailure | 'notText' | 'folder';
@@ -12,13 +13,6 @@ export interface DeferredReference {
   readonly ref: string;
   readonly reason: FallbackReason;
 }
-
-const REASON_MESSAGES: Record<FallbackReason, string> = {
-  notInstalled: 'Claude Code拡張が見つかりません',
-  failed: 'Claudeへの送信に失敗しました',
-  notText: 'テキストとして開けないファイルがあります',
-  folder: 'フォルダはチャットに直接入れられません',
-};
 
 /**
  * 後回しにした参照をチャットに届ける
@@ -32,17 +26,24 @@ export async function deliverDeferredReferences(deferred: readonly DeferredRefer
   const reasons = deferred.map((d) => d.reason);
 
   if (!isClaudeInstalled()) {
-    // フォルダは公式コマンドを呼ぶ前に振り分けるので、拡張が無いことをここで理由に足す
+    // フォルダは公式コマンドを呼ぶ前に振り分けるので、拡張がないことをここで理由に足す
     await copyWithWarning(refs, ['notInstalled', ...reasons]);
     return;
   }
-  if (reasons.every(canPaste) && (await pasteIntoChat(refs))) return;
+  if (reasons.every(canPaste) && refs.every(isSafeToPaste) && (await pasteIntoChat(refs))) return;
   await copyWithWarning(refs, reasons);
 }
 
 /** 公式拡張は動いていて、種類が合わないだけのとき */
 function canPaste(reason: FallbackReason): boolean {
   return reason === 'folder' || reason === 'notText';
+}
+
+// フォーカスがチャットに移らないと、貼り付けはエディタやターミナルに入る
+// ファイル名の改行などがターミナルに入るとコマンドとして動きうるので、制御文字を含むものは貼り付けない
+function isSafeToPaste(ref: string): boolean {
+  // oxlint-disable-next-line no-control-regex
+  return !/[\u0000-\u001f\u007f]/.test(ref);
 }
 
 /**
@@ -55,9 +56,7 @@ async function pasteIntoChat(refs: readonly string[]): Promise<boolean> {
   if (!(await pasteClipboardIntoChat())) return false;
 
   // 通知は await しない（ユーザーが閉じるまで処理が止まるため）
-  void vscode.window.showInformationMessage(
-    `チャットに貼り付けました: ${text}（入っていなければ、チャット欄で Ctrl+V を押してください）`,
-  );
+  void vscode.window.showInformationMessage(MESSAGES.pasted(text));
   return true;
 }
 
@@ -66,5 +65,5 @@ async function copyWithWarning(refs: readonly string[], reasons: readonly Fallba
   await vscode.env.clipboard.writeText(text);
 
   const why = [...new Set(reasons)].map((r) => REASON_MESSAGES[r]).join('。');
-  void vscode.window.showWarningMessage(`${why}。参照をクリップボードにコピーしました: ${text}`);
+  void vscode.window.showWarningMessage(MESSAGES.copied(why, text));
 }

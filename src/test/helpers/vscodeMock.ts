@@ -1,11 +1,12 @@
 // VS Code API の最小限のモック
 // 拡張（out/*.js）が使う部分だけを再現し、呼び出しを記録する
-
+// 拡張が CommonJS の require('vscode') でモックを読むことを前提にしている
 
 import * as path from 'path';
 import Module = require('module');
 
-// 型だけを使う（実行時には読み込まないので、モックより先に本物の拡張が読み込まれることはない）
+// 型だけを使う
+// 実行時には読み込まないので、モックより先に本物が読み込まれることはない
 type Extension = typeof import('../../extension');
 
 export class Position {
@@ -27,11 +28,24 @@ export class Range {
   }
 }
 
-/** VS Code の Selection と同じく、start <= end に並べ替える */
-export function makeSelection(aLine: number, aChar: number, bLine: number, bChar: number): Range {
-  const aFirst = aLine < bLine || (aLine === bLine && aChar <= bChar);
-  return aFirst ? new Range(aLine, aChar, bLine, bChar) : new Range(bLine, bChar, aLine, aChar);
+/** VS Code の Selection と同じく、start <= end に並べ替え、anchor と active も持つ */
+export class Selection extends Range {
+  constructor(
+    readonly anchor: Position,
+    readonly active: Position,
+  ) {
+    const anchorFirst =
+      anchor.line < active.line || (anchor.line === active.line && anchor.character <= active.character);
+    const [s, e] = anchorFirst ? [anchor, active] : [active, anchor];
+    super(s.line, s.character, e.line, e.character);
+  }
 }
+
+export function makeSelection(aLine: number, aChar: number, bLine: number, bChar: number): Selection {
+  return new Selection(new Position(aLine, aChar), new Position(bLine, bChar));
+}
+
+const emptySelection = () => makeSelection(0, 0, 0, 0);
 
 export interface MockUri {
   scheme: string;
@@ -49,13 +63,25 @@ interface MockDocument {
   fileName: string;
 }
 
-interface MockEditor {
-  document: MockDocument;
-  selection?: Range;
+/** 本物と同じく、selection は selections の先頭 */
+export class MockEditor {
+  selections: Range[];
+  constructor(
+    readonly document: MockDocument,
+    selection: Range = emptySelection(),
+  ) {
+    this.selections = [selection];
+  }
+  get selection(): Range {
+    return this.selections[0];
+  }
+  set selection(s: Range) {
+    this.selections = [s];
+  }
 }
 
-export function makeEditor(fsPath: string, selection: Range = new Range(0, 0, 0, 0)): MockEditor {
-  return { document: { uri: uri(fsPath), fileName: fsPath }, selection };
+export function makeEditor(fsPath: string, selection?: Range): MockEditor {
+  return new MockEditor({ uri: uri(fsPath), fileName: fsPath }, selection);
 }
 
 type PathPredicate = (fsPath: string) => boolean;
@@ -76,9 +102,15 @@ export interface MockOptions {
   statFails?: PathPredicate;
   /** showTextDocument が失敗するファイル */
   showFails?: PathPredicate;
-  /** 最初からタブが開いているファイル */
+  /** 最初から、今のエディタグループにタブが開いているファイル */
   openTabs?: string[];
-  /** tabGroups.close が失敗する */
+  /** 最初から、別のエディタグループにだけタブが開いているファイル */
+  otherGroupTabs?: string[];
+  /** 開いているファイルの選択範囲（showTextDocument で前面に出したときに、この選択のまま出てくる） */
+  selections?: Record<string, Range>;
+  /** openTextDocument が返すドキュメントのパス（Windows で大文字小文字だけ違うパスを再現する） */
+  documentPath?: (fsPath: string) => string;
+  /** tabGroups.close が例外を投げる */
   closeFails?: boolean;
 }
 
@@ -102,14 +134,20 @@ export interface MockState {
   infos: string[];
   /** コマンド ID → ハンドラ */
   registered: Map<string, Handler>;
-  /** openTextDocument したパス */
+  /** openTextDocument に渡されたパス */
   opened: string[];
   /** showTextDocument に渡されたもの */
-  shown: { fsPath: string; options: { preview?: boolean; preserveFocus?: boolean; selection?: Range } }[];
-  /** 今開いているタブ */
+  shown: { fsPath: string; options: { preview?: boolean; preserveFocus?: boolean } }[];
+  /** 今のエディタグループのタブ */
   tabs: MockTab[];
+  /** 別のエディタグループのタブ */
+  otherTabs: MockTab[];
   /** tabGroups.close で閉じたファイルのパス */
   closed: string[];
+  /** tabGroups.close に渡された preserveFocus */
+  closePreserveFocus: (boolean | undefined)[];
+  /** パス → そのファイルのエディタ（もう一度前面に出すと同じエディタが出てくる） */
+  editors: Map<string, MockEditor>;
 }
 
 export function createVscodeMock(opts: MockOptions = {}) {
@@ -119,6 +157,7 @@ export function createVscodeMock(opts: MockOptions = {}) {
     index: i,
   }));
 
+  const toTab = (p: string): MockTab => ({ input: new TabInputText(uri(p)) });
   const state: MockState = {
     executed: [],
     clipboard: '',
@@ -128,17 +167,24 @@ export function createVscodeMock(opts: MockOptions = {}) {
     registered: new Map(),
     opened: [],
     shown: [],
-    tabs: (opts.openTabs ?? []).map((p) => ({ input: new TabInputText(uri(p)) })),
+    tabs: (opts.openTabs ?? []).map(toTab),
+    otherTabs: (opts.otherGroupTabs ?? []).map(toTab),
     closed: [],
+    closePreserveFocus: [],
+    editors: new Map(),
   };
-  const hasTab = (u: MockUri) => state.tabs.some((t) => t.input.uri.toString() === u.toString());
+  const hasTabIn = (tabs: MockTab[], u: MockUri) => tabs.some((t) => t.input.uri.toString() === u.toString());
 
   const FileType = { Unknown: 0, File: 1, Directory: 2, SymbolicLink: 64 };
   const is = (pred: PathPredicate | undefined, p: string) => Boolean(pred?.(p));
+  // 本物の通知は、ユーザーが閉じるまで解決しない
+  // うっかり await すると、テストが止まって気づける
+  const pending = () => new Promise<undefined>(() => {});
 
   const vscode = {
     Range,
     Position,
+    Selection,
     FileType,
     TabInputText,
     workspace: {
@@ -167,40 +213,51 @@ export function createVscodeMock(opts: MockOptions = {}) {
       async openTextDocument(u: MockUri): Promise<MockDocument> {
         state.opened.push(u.fsPath);
         if (is(opts.isBinary, u.fsPath)) throw new Error('File seems to be binary and cannot be opened as text');
-        return { uri: u, fileName: u.fsPath };
+        const p = opts.documentPath?.(u.fsPath) ?? u.fsPath;
+        return { uri: uri(p), fileName: p };
       },
     },
     window: {
       activeTextEditor: undefined as MockEditor | undefined,
+      // 本物と同じく、今のエディタグループに開く（別のグループにだけあるときは、今のグループに新しいタブができる）
       async showTextDocument(doc: MockDocument, options: MockState['shown'][number]['options']) {
         state.shown.push({ fsPath: doc.uri.fsPath, options });
         if (is(opts.showFails, doc.uri.fsPath)) throw new Error('Could not open editor');
-        if (!hasTab(doc.uri)) state.tabs.push({ input: new TabInputText(doc.uri) });
-        const editor: MockEditor = { document: doc, selection: options.selection ?? new Range(0, 0, 0, 0) };
+        const key = doc.uri.fsPath;
+        if (!hasTabIn(state.tabs, doc.uri)) state.tabs.push({ input: new TabInputText(doc.uri) });
+        let editor = state.editors.get(key);
+        if (!editor) {
+          editor = new MockEditor(doc, opts.selections?.[key]);
+          state.editors.set(key, editor);
+        }
         vscode.window.activeTextEditor = editor;
         return editor;
       },
       tabGroups: {
         get all() {
-          return [{ tabs: state.tabs }];
+          return [{ tabs: state.tabs }, { tabs: state.otherTabs }];
         },
-        async close(tabs: MockTab | MockTab[]) {
+        get activeTabGroup() {
+          return { tabs: state.tabs };
+        },
+        async close(tabs: MockTab | MockTab[], preserveFocus?: boolean) {
+          state.closePreserveFocus.push(preserveFocus);
           if (opts.closeFails) throw new Error('Could not close tab');
           for (const tab of Array.isArray(tabs) ? tabs : [tabs]) {
             state.tabs = state.tabs.filter((t) => t !== tab);
+            state.otherTabs = state.otherTabs.filter((t) => t !== tab);
             state.closed.push(tab.input.uri.fsPath);
           }
           return true;
         },
       },
-      // 本物と同じく Thenable を返す（本物はユーザーが閉じるまで解決しない）
       showWarningMessage: (m: string) => {
         state.warnings.push(m);
-        return Promise.resolve(undefined);
+        return pending();
       },
       showInformationMessage: (m: string) => {
         state.infos.push(m);
-        return Promise.resolve(undefined);
+        return pending();
       },
     },
     commands: {

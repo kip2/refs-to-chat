@@ -1,7 +1,7 @@
 {
   "name": "right-click-mention",
   "displayName": "Right Click Mention",
-  "description": "右クリックから選択範囲やファイルをClaude Codeのチャットに送る",
+  "description": "右クリックから選択範囲やファイルの参照を Claude Code のチャットに追加する（非公式）",
   "version": "0.0.5",
   "publisher": "kip2",
   "license": "MIT",
@@ -92,11 +92,11 @@
       "commandPalette": [
         {
           "command": "rightClickMention.sendSelection",
-          "when": "!config.claudeCode.useTerminal"
+          "when": "editorIsOpen && !config.claudeCode.useTerminal"
         },
         {
           "command": "rightClickMention.sendCurrentFile",
-          "when": "!config.claudeCode.useTerminal"
+          "when": "editorIsOpen && !config.claudeCode.useTerminal"
         },
         {
           "command": "rightClickMention.sendFile",
