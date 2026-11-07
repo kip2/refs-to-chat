@@ -32,19 +32,25 @@ export interface OpenedForMention {
  * 公式コマンドはアクティブなエディタから参照を作り、選択範囲があると行番号を付けるため
  * 画像など、開けなければ undefined
  */
-export async function openForMention(uri: vscode.Uri): Promise<OpenedForMention | undefined> {
+export async function openForMention(
+  uri: vscode.Uri,
+  viewColumn?: vscode.ViewColumn,
+): Promise<OpenedForMention | undefined> {
   try {
     const document = await vscode.workspace.openTextDocument(uri);
+    // ユーザーが選んでいたグループに開く
+    // 2 つ目以降のファイルは、チャットを開いたあとなので、指定しないとチャットのグループに開いてしまう
+    const group = groupOf(viewColumn);
     // ドキュメント自身の URI で調べる
     // Windows でパスの大文字小文字が違っても、同じファイルなら同じドキュメントが返る
-    const hadTab = vscode.window.tabGroups.activeTabGroup.tabs.some((tab) => isTabOf(tab, document.uri));
+    const hadTab = group.tabs.some((tab) => isTabOf(tab, document.uri));
 
     const editor = await vscode.window.showTextDocument(document, {
+      viewColumn: group.viewColumn,
       // プレビューで開くと、ユーザーがプレビューで開いていた別のタブを置き換えて消してしまう
       preview: false,
       preserveFocus: false,
     });
-    const group = vscode.window.tabGroups.activeTabGroup;
 
     // カーソルは動かさず、選択だけを空にする
     const original = editor.selections;
@@ -55,7 +61,9 @@ export async function openForMention(uri: vscode.Uri): Promise<OpenedForMention 
       editor,
       finish: async () => {
         if (hadTab) {
-          editor.selections = original;
+          // チャットを開いたときに元のエディタが作り直されていることがあるので、今見えているものに戻す
+          const live = vscode.window.visibleTextEditors.find((e) => e.document === document) ?? editor;
+          live.selections = original;
           return;
         }
         await closeTabs(group.tabs.filter((tab) => isTabOf(tab, document.uri)));
@@ -79,4 +87,11 @@ async function closeTabs(tabs: vscode.Tab[]): Promise<void> {
   } catch (err) {
     console.error(LOG_PREFIX, err);
   }
+}
+
+/** そのグループ（なければ、今のグループ） */
+function groupOf(viewColumn: vscode.ViewColumn | undefined): vscode.TabGroup {
+  return (
+    vscode.window.tabGroups.all.find((g) => g.viewColumn === viewColumn) ?? vscode.window.tabGroups.activeTabGroup
+  );
 }

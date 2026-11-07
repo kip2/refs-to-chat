@@ -28,3 +28,6 @@ updates:
     ignore:
       # engines.vscode（^1.94.0）と合わせるため、@types/vscode は手で上げる
       - dependency-name: '@types/vscode'
+      # 拡張が動く VS Code の Node（20）に合わせるため、@types/node のメジャーは手で上げる
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']

@@ -1,8 +1,8 @@
 // 実際の VS Code 上で動かすテスト
-// ワークスペース: src/test/fixtures/multi-root（alpha / beta の2フォルダ）
-// 公式 Claude 拡張は無効なので、送信結果はクリップボードの中身で確認する
+// ワークスペース: src/test/fixtures/multi-root（alpha / beta の 2 フォルダ）
+// 公式拡張は無効なので、結果はクリップボードの中身で確かめる
 
-import * as assert from 'assert';
+import * as assert from 'node:assert';
 import * as vscode from 'vscode';
 
 const EXT_ID = 'kip2.right-click-mention';
@@ -12,7 +12,7 @@ const folders = () => vscode.workspace.workspaceFolders ?? [];
 
 function fileIn(folderName: string, rel: string): vscode.Uri {
   const folder = folders().find((f) => f.name === folderName);
-  assert.ok(folder, `ワークスペースに ${folderName} が無い`);
+  assert.ok(folder, `ワークスペースに ${folderName} がない`);
   return vscode.Uri.joinPath(folder.uri, ...rel.split('/'));
 }
 
@@ -44,6 +44,10 @@ describe('Right Click Mention（実VS Code・マルチルート）', function ()
     const ext = vscode.extensions.getExtension(EXT_ID);
     assert.ok(ext, `${EXT_ID} が読み込まれていない`);
     await ext.activate();
+    // テスト用の VS Code の設定は実行をまたいで残るので、前の実行が途中で止まっていても初期設定から始める
+    await setExplorerFiles(undefined);
+    const setting = vscode.workspace.getConfiguration('rightClickMention').inspect('explorerFiles');
+    assert.strictEqual(setting?.globalValue, undefined);
   });
 
   beforeEach(async function () {
@@ -52,11 +56,11 @@ describe('Right Click Mention（実VS Code・マルチルート）', function ()
   });
 
   describe('前提条件', function () {
-    it('ワークスペースが alpha / beta の2フォルダ', function () {
+    it('ワークスペースが alpha / beta の 2 フォルダ', function () {
       assert.deepStrictEqual(folders().map((f) => f.name), ['alpha', 'beta']);
     });
 
-    it('公式 Claude 拡張は無効（フォールバック経路をテストするため）', function () {
+    it('公式拡張は無効（フォールバック経路をテストするため）', function () {
       assert.strictEqual(vscode.extensions.getExtension('anthropic.claude-code'), undefined);
     });
 
@@ -192,12 +196,20 @@ describe('Right Click Mention（実VS Code・マルチルート）', function ()
 
   describe('エクスプローラーからの送信（初期設定: 貼り付け）', function () {
     // 公式拡張を無効にしているので、貼り付けまではいかず、クリップボードへのコピーになる
-    it('ファイルを開かずに参照を作る（タブは開かない）', async function () {
+    // 設定 open でも、開いてすぐ閉じるので最後のタブの状態は同じになる
+    // そのため、タブが一度も変化しないことで、開いていないことを確かめる
+    it('ファイルを開かずに参照を作る（タブは一度も開かない）', async function () {
       const uri = fileIn('alpha', 'src/app.js');
-      await vscode.commands.executeCommand('rightClickMention.sendFile', uri, [uri]);
+      let tabChanges = 0;
+      const sub = vscode.window.tabGroups.onDidChangeTabs(() => tabChanges++);
+      try {
+        await vscode.commands.executeCommand('rightClickMention.sendFile', uri, [uri]);
+      } finally {
+        sub.dispose();
+      }
       assert.strictEqual(await clipboard(), '@alpha/src/app.js');
+      assert.strictEqual(tabChanges, 0);
       assert.strictEqual(hasTab(uri), false);
-      assert.strictEqual(vscode.window.activeTextEditor, undefined);
     });
 
     it('ファイルとフォルダを混ぜても、選んだ順にまとめて 1 回でコピーする', async function () {

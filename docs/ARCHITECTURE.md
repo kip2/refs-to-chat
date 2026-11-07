@@ -26,11 +26,11 @@ flowchart LR
       SAE["commands.ts<br/>addActiveEditorToChat()"]
       SF["commands.ts<br/>addExplorerItemsToChat()"]
       STC["claudeChat.ts<br/>insertMentionFor(editor)"]
-      PST["fallback.ts → claudeChat.ts<br/>deliverDeferredReferences()<br/>（貼り付け）"]
-      FB["fallback.ts<br/>deliverDeferredReferences()<br/>（コピー + 警告）"]
+      PST["delivery.ts → claudeChat.ts<br/>deliverPendingReferences()<br/>（貼り付け）"]
+      FB["delivery.ts<br/>deliverPendingReferences()<br/>（コピー + 警告）"]
     end
 
-    subgraph Claude["公式 Claude Code 拡張"]
+    subgraph Claude["公式の Claude Code 拡張"]
       C1["claude-vscode.insertAtMention"]
       C2["claude-vscode.focus"]
       P["Claude のチャットの入力欄"]
@@ -44,10 +44,11 @@ flowchart LR
   M2 --> SAE
   M3 --> SF
   SAE --> STC
-  SF -->|ファイルを開いて| STC
+  SF -->|設定 open: ファイルを開いて| STC
+  STC -->|先にチャットを開く| C2
   STC --> C1
   C1 --> P
-  SF -->|フォルダ / 開けないファイル<br/>（コピーしてから）| PST
+  SF -->|フォルダ / 開けないファイル<br/>ファイル（設定 paste・初期設定）<br/>（コピーしてから）| PST
   PST --> C2
   C2 --> P
   PST --> PASTE
@@ -61,8 +62,9 @@ flowchart LR
 
 - メニュー項目・表示条件は `package.json` の `contributes.menus` だけで決まる（コードは書いていない）。
 - 実際に `@file#5-10` を作ってチャットに入れるのは公式拡張。この拡張はそのコマンドを呼ぶだけ。
+- エクスプローラーのファイルは、初期設定（`paste`）では開かずに貼り付けで入れる。設定を `open` にすると、ファイルを一瞬開いて公式コマンドで入れる。
 - フォルダとテキストで開けないファイルは、公式コマンドでは扱えない。参照をクリップボードにコピーし、公式の「Focus input」（`claude-vscode.focus`）で入力欄にフォーカスしてから、VS Code 標準の貼り付けを呼ぶ。使うのはどちらも公開されているコマンドだけ。
-- 公式拡張が使えないときや貼り付けを呼べないとき、参照に制御文字（改行など）が入っているときは、参照をクリップボードにコピーして警告を出す。複数あるときは空白でつないで 1 回だけコピーし、通知・警告も 1 回にまとめる。
+- 公式拡張が使えないときや貼り付けを呼べないとき、参照に制御文字（改行・見えない書式文字・行区切りなど）が入っているときは、参照をクリップボードにコピーして警告を出す。複数あるときは空白でつないで 1 回だけコピーし、通知・警告も 1 回にまとめる。
 
 ---
 
@@ -70,7 +72,7 @@ flowchart LR
 
 | ファイル | 役割 |
 |---|---|
-| `package.json` | 拡張のマニフェスト。コマンド 3 つと右クリックメニューを宣言 |
+| `package.json` | 拡張のマニフェスト。コマンド 3 つ、右クリックメニュー、設定（`contributes.configuration`）を宣言 |
 | `src/` | 本体（→ 4 章）。役目ごとにファイルを分けている |
 | `out/` | `src/` のコンパイル結果。`package.json` の `main` はここを指す。git には入れない |
 | `tsconfig.json` | TypeScript（7）の設定（`strict` で型を厳しくチェック）。TypeScript 6 以降は `@types/*` が自動で読み込まれないので、`types` に node / mocha / vscode を書いている |
@@ -135,9 +137,9 @@ flowchart TD
   CMD --> CFG["config.ts<br/>設定を読む"]
   CFG --> CONST
   CMD --> MSG["messages.ts<br/>画面に出す文"]
-  FB --> MSG
   CMD --> CHAT["claudeChat.ts<br/>公式拡張とのやり取り"]
-  CMD --> FB["fallback.ts<br/>貼り付け・コピー"]
+  CMD --> FB["delivery.ts<br/>貼り付け・コピー"]
+  FB --> MSG
   CMD --> WS["workspace.ts<br/>パス・フォルダ判定<br/>ファイルを開く・タブを閉じる"]
   CMD --> REF["reference.ts<br/>参照の文字列"]
   FB --> CHAT
@@ -151,14 +153,14 @@ flowchart TD
 | ファイル | 中身 |
 |---|---|
 | `extension.ts` | `activate(context)`: 3 つのコマンドを登録（`sendSelection` と `sendCurrentFile` は同じ処理）。`deactivate()` |
-| `commands.ts` | `addActiveEditorToChat()`: エディタの右クリック。公式コマンドで入れ、入れられなければ `deliverDeferredReferences` に渡す<br/>`addExplorerItemsToChat(clicked, selected)`: エクスプローラーの右クリック。ファイルは `openForMention` で開いて公式コマンドで入れ、`finish()` で選択を戻すか、この拡張が開いたタブを閉じる。入れられなかったもの（フォルダ・開けないファイル・失敗）は `{ ref, reason }` として後回しにし、最後にまとめて `deliverDeferredReferences` に渡す |
-| `claudeChat.ts` | `isClaudeInstalled()`<br/>`insertMentionFor(editor)`: 先にチャットを開き（`claude-vscode.focus`）、元のエディタを前面に戻してから、公式コマンドを呼ぶ。入れられなかった理由（`notInstalled` / `failed`）を返す<br/>`pasteClipboardIntoChat()`: `claude-vscode.focus` → 少し待つ → 標準の貼り付け |
-| `fallback.ts` | `FallbackReason`（理由の種類）と表示文、`DeferredReference`（`{ ref, reason }`）<br/>`deliverDeferredReferences(deferred)`: 貼り付けるかコピーするかをここだけで決める。公式拡張があり、理由がフォルダ・開けないファイルだけなら貼り付け（通知 1 回）。それ以外はコピー（警告 1 回）。参照に制御文字（改行など）が入っていれば、貼り付けずにコピーする。公式拡張がなければ、その理由も警告に足す |
-| `workspace.ts` | `workspacePath(uri)`: 公式と同じ形式のパス<br/>`isFolder(uri)`: `workspace.fs.stat` で判定（シンボリックリンクのフォルダも含む。調べられなければファイル扱い）<br/>`openForMention(uri)`: `openTextDocument` で開き、アクティブなエディタグループにそのドキュメントのタブがあるかを（ドキュメント自身の URI で）調べてから表示する（プレビューにしない）。公式コマンドを呼ぶ直前に、選択を今のカーソル位置の空の選択にする。`{ editor, finish() }` を返し、開けない・表示できなければ `undefined`<br/>`finish()`: タブを残すときは元の選択を戻し、この拡張が開いたタブなら閉じる（`tabGroups` を使う） |
+| `commands.ts` | `addActiveEditorToChat()`: エディタの右クリック。公式コマンドで入れ、入れられなければ `deliverPendingReferences` に渡す<br/>`addExplorerItemsToChat(clicked, selected)`: エクスプローラーの右クリック。URI がひとつもなければ「追加するファイルやフォルダがありません」と通知して終わる。設定は最初に 1 回だけ読む。ファイルを開く前に、ユーザーがいま使っているエディタグループ（`viewColumn`）を覚えておく。1 つずつ次のように振り分ける<br/>・フォルダ → `{ ref, reason: 'folder' }` として後回し<br/>・ファイルで設定 `paste`（初期設定） → 開かずに `{ ref, reason: 'pasteFile' }` として後回し<br/>・ファイルで設定 `open` → `addFileByOpening(uri, column)` で入れる。入れられなければ `PendingReference` を返し、後回しにする<br/>最後に、後回しにしたものをまとめて `deliverPendingReferences` に渡す<br/>`addFileByOpening(uri, column)`: `openForMention(uri, column)` で開き、`insertMentionFor(editor)` で入れてから `finish()` を呼ぶ |
+| `claudeChat.ts` | `isClaudeInstalled()`<br/>`insertMentionFor(editor)`: 公式拡張がなければ `notInstalled` を返す。あれば、先にチャットを開き（`claude-vscode.focus`）、`bringToFront(editor)` で元のエディタを前面に戻してから、公式コマンド（`claude-vscode.insertAtMention`）を呼ぶ。失敗したら `failed` を返す<br/>`bringToFront(editor)`: そのエディタのドキュメントがまだアクティブなエディタなら何もしない（チャットがサイドバーにあるときは、ふつうこれ）。`viewColumn` がないときや、ノートブックのセルのときも何もしない。それ以外は `showTextDocument(doc, { viewColumn, preserveFocus: false, selection })` で前面に戻す<br/>`pasteClipboardIntoChat()`: `claude-vscode.focus` → `FOCUS_WAIT_MS`（800ms）待つ → 標準の貼り付け |
+| `delivery.ts` | `DeliveryReason`（理由の種類: `notInstalled` / `failed` / `notText` / `folder` / `pasteFile`）、`PendingReference`（`{ ref, reason }`）<br/>`deliverPendingReferences(pending)`: 貼り付けるかコピーするかをここだけで決める。次の 3 つがそろえば貼り付け（通知 1 回）。それ以外はコピー（警告 1 回）<br/>・公式拡張がある<br/>・理由がすべて `folder` / `notText` / `pasteFile`<br/>・参照に制御文字・見えない書式文字・行区切り（`\p{Cc}` `\p{Cf}` `\p{Zl}` `\p{Zp}`）が入っていない<br/>公式拡張がなければ、その理由も警告に足す。表示する文は `messages.ts` にある |
+| `workspace.ts` | `workspacePath(uri)`: 公式と同じ形式のパス<br/>`isFolder(uri)`: `workspace.fs.stat` で判定（シンボリックリンクのフォルダも含む。調べられなければファイル扱い）<br/>`openForMention(uri, viewColumn?)`: `openTextDocument` で開き、渡されたエディタグループ（ユーザーがもともと使っていたグループ）に表示する。2 つ目以降のファイルが、チャットのグループに開かないようにするため。表示する前に、そのグループにそのドキュメントのタブがあるかを、ドキュメント自身の URI で調べる。プレビューにはしない。公式コマンドを呼ぶ直前に、選択を今のカーソル位置の空の選択にする。`{ editor, finish() }` を返し、開けない・表示できなければ `undefined`<br/>`finish()`: タブを残すときは、そのドキュメントをいま表示しているエディタに元の選択を戻す（エディタが作り直されていることがあるため）。この拡張が開いたタブなら閉じる（`tabGroups` を使う） |
 | `reference.ts` | `fileReference(path, selection?)`: `@path` / `@path#8` / `@path#5-10`<br/>`folderReference(path)`: `@path/`<br/>`joinReferences(refs)`: 空白でつなぐ |
 | `constants.ts` | `COMMANDS`（この拡張のコマンド ID）、`CLAUDE`（公式拡張の ID とコマンド）、`PASTE_COMMAND`、`FOCUS_WAIT_MS`、`LOG_PREFIX`、`SETTINGS`（設定の名前） |
 | `config.ts` | `explorerFileMode()`: 設定 `rightClickMention.explorerFiles` を読む。`paste`（初期設定。エクスプローラーのファイルも開かずに貼り付ける）か `open`（一瞬開いて公式コマンドで入れる）。知らない値は `paste` として扱う |
-| `messages.ts` | 画面に出す文。`REASON_MESSAGES`（公式コマンドで入れられなかった理由）と `MESSAGES`（開いているファイルがない、貼り付けた、コピーした）。テストも同じ定数と比べるので、文を変えてもテストを直さなくてよい |
+| `messages.ts` | 画面に出す文。`REASON_MESSAGES`（公式コマンドで入れられなかった理由）と `MESSAGES`（開いているファイルがない、追加するものがない、貼り付けた、コピーした）。貼り付けの通知は参照を並べるが、4 つ以上なら「N 件」と件数だけにする。テストも同じ定数と比べるので、文を変えてもテストを直さなくてよい |
 
 名前に使う動詞の使い分け:
 
@@ -167,7 +169,7 @@ flowchart TD
 | add | この拡張のコマンド（ユーザーから見た「チャットに追加」） | `addExplorerItemsToChat` |
 | insert | 公式コマンドでチャットに入れる | `insertMentionFor` |
 | paste | クリップボードからチャットに貼り付ける | `pasteClipboardIntoChat` |
-| deliver | 後回しにした参照を、貼り付けかコピーで届ける | `deliverDeferredReferences` |
+| deliver | 後回しにした参照を、まとめて貼り付けかコピーで届ける | `deliverPendingReferences` |
 
 `COMMANDS` のキーが `sendXxx` なのは、公開済みのコマンド ID（`rightClickMention.sendSelection` など）に合わせているため。
 
@@ -177,8 +179,9 @@ flowchart TD
 - 公式拡張の別のコマンドを使う → `constants.ts` の `CLAUDE` と `claudeChat.ts`
 - 参照の形式を変える・増やす → `reference.ts`（テストはモックなしで書ける）
 - 画面に出す文を変える → `messages.ts` だけ
-- 貼り付けるかコピーするかの条件を変える（自動の貼り付けを切る設定など） → `fallback.ts` の `deliverDeferredReferences` だけ
-- 設定を足す → `package.json` の `contributes.configuration` に宣言し、`constants.ts` の `SETTINGS` に名前を書き、`config.ts` に読む関数を足す。読む処理を使う側のファイルに置く
+- 貼り付けるかコピーするかの条件を変える（自動の貼り付けを切る設定など） → `delivery.ts` の `deliverPendingReferences` だけ
+- 設定を足す → `package.json` の `contributes.configuration` に宣言し、`constants.ts` の `SETTINGS` に名前を書き、`config.ts` に読む関数を足す。その関数を呼ぶのは、設定を使う側のファイル
+- ファイルを開いて入れる流れ → `commands.ts` の `addFileByOpening` と `workspace.ts` の `openForMention`
 - タブを閉じない設定 → `workspace.ts` の `openForMention` の `finish`
 - キーボードショートカット → `package.json` の `keybindings` だけ（コード変更なし）
 
@@ -193,7 +196,7 @@ sequenceDiagram
   actor U as ユーザー
   participant VS as VS Code
   participant E as この拡張
-  participant C as 公式 Claude 拡張
+  participant C as 公式拡張
   participant W as Claude のチャット
 
   U->>VS: 選択して右クリック →「選択範囲をClaudeのチャットに追加」
@@ -201,10 +204,12 @@ sequenceDiagram
   E->>E: activeTextEditor を取得
   E->>E: 公式拡張がインストール済みか確認
   E->>C: claude-vscode.focus（先にチャットを開く）
-  E->>VS: showTextDocument（元のエディタを前面に戻す・選択はそのまま）
+  opt 元のエディタがもう前面にない（チャットがエディタのタブにあるときなど）
+    E->>VS: showTextDocument（元のエディタを前面に戻す・選択はそのまま）
+  end
   E->>C: executeCommand('claude-vscode.insertAtMention')
   C->>C: activeTextEditor の選択から @path#5-10 を作る
-  C->>W: 表示中のチャット全部に挿入（なければ開いて挿入）
+  C->>W: 表示中のチャットすべてに挿入（なければ開いて挿入）
 ```
 
 ### 5-2. エクスプローラーでファイル・フォルダを右クリック
@@ -214,19 +219,22 @@ sequenceDiagram
   actor U as ユーザー
   participant VS as VS Code
   participant E as この拡張
-  participant C as 公式 Claude 拡張
+  participant C as 公式拡張
 
   U->>VS: ファイル・フォルダを右クリック（複数選択可）
   VS->>E: rightClickMention.sendFile(clicked, selected[])
+  E->>E: 設定を読む・いまのエディタグループを覚える
   loop 選択されたものごと
     E->>VS: workspace.fs.stat
     alt フォルダ
       E->>E: @path/ を後回しリストに追加
-    else ファイル
-      E->>VS: openTextDocument → アクティブなグループのタブを調べる → showTextDocument
+    else ファイルで設定 paste（初期設定）
+      E->>E: 開かずに @path を後回しリストに追加
+    else ファイルで設定 open
+      E->>VS: openTextDocument → 覚えたグループのタブを調べる → showTextDocument
       alt テキストとして開けた
         E->>VS: 選択を今のカーソル位置の空の選択にする
-        E->>C: insertMentionFor → チャットを開く → 前面に戻す → 公式コマンド
+        E->>C: insertMentionFor → チャットを開く → 前面に戻す（前面ならしない） → 公式コマンド
         C-->>U: @path がチャットに入る
         Note over E,C: 公式拡張がない・失敗したら @path を後回しリストに追加
         E->>VS: finish()（元の選択を戻す / この拡張が開いたタブを閉じる）
@@ -235,7 +243,7 @@ sequenceDiagram
       end
     end
   end
-  alt 後回しがフォルダ・開けないファイルだけ（公式拡張あり）
+  alt 後回しがフォルダ・開けないファイル・設定 paste のファイルだけ（公式拡張あり）
     E->>VS: 空白でつないでクリップボードにコピー
     E->>C: claude-vscode.focus（入力欄にフォーカス）
     E->>VS: 800ms 待って editor.action.clipboardPasteAction
@@ -245,23 +253,26 @@ sequenceDiagram
   end
 ```
 
-ファイルを一度エディタで開くのは、公式コマンドが「アクティブなエディタ」からしか参照を作れないため（URI を引数で渡す口がない）。
+設定 `open` のとき、ファイルを一度エディタで開くのは、公式コマンドが「アクティブなエディタ」からしか参照を作れないため（URI を引数で渡す口がない）。
 
-開いたタブの扱い:
+設定 `open` のとき、開いたタブの扱い:
 
-- `openTextDocument` で開いたあと、表示する前に、アクティブなエディタグループにそのドキュメントのタブがあるかを調べる。比べるのはドキュメント自身の URI なので、Windows でパスの大文字・小文字が違っても正しく判定できる。
-- アクティブなグループにタブがなかったときは、この拡張が開いたタブとして、公式コマンドで入れたあと（入れられずコピーに回ったときも）すぐ閉じる。ほかのグループでだけ開いていたファイルも、アクティブなグループに新しいタブができるので、それを閉じる。
-- アクティブなグループにもともとタブがあったときは、タブを残す。カーソルの位置や選択範囲も、送ったあとで元に戻す。
+- 開くのは、ユーザーがもともと使っていたエディタグループ。最初のファイルでチャットを開くと、チャットのグループがアクティブになることがあるので、最初に覚えておいたグループを使う。2 つ目以降のファイルがチャットのグループに開くのを防ぐため。
+- `openTextDocument` で開いたあと、表示する前に、そのグループにそのドキュメントのタブがあるかを調べる。比べるのはドキュメント自身の URI なので、Windows でパスの大文字・小文字が違っても正しく判定できる。
+- そのグループにタブがなかったときは、この拡張が開いたタブとして、公式コマンドで入れたあと（入れられずコピーに回ったときも）すぐ閉じる。ほかのグループでだけ開いていたファイルも、そのグループに新しいタブができるので、それを閉じる。
+- そのグループにもともとタブがあったときは、タブを残す。カーソルの位置や選択範囲も、送ったあとで元に戻す。戻す先は、そのドキュメントをいま表示しているエディタ（前面に戻したときにエディタが作り直されていることがあるため）。
 - 表示するときに選択を (0,0) へ動かすことはしない。公式コマンドを呼ぶ直前に、選択を今のカーソル位置の空の選択にする（公式コマンドが選択範囲を参照に含めてしまうため）。
 - プレビュー（斜体のタブ）では開かない。プレビューで開くと、ユーザーがプレビューで開いていた別のファイルのタブを置き換えて消してしまうため。プレビューにしなくても、送ったあとで閉じるのでタブは増えない。
 
-### 5-3. フォールバックの判断
+### 5-3. 公式コマンドで入れられないときの判断
 
 ```mermaid
 flowchart TD
   S([insertMentionFor]) --> Q1{公式拡張<br/>anthropic.claude-code<br/>がある？}
-  Q1 -- いいえ --> F[理由を返す → deliverDeferredReferences<br/>参照をクリップボードへ]
-  Q1 -- はい --> P[claude-vscode.insertAtMention]
+  Q1 -- いいえ --> F[理由を返す → deliverPendingReferences<br/>参照をクリップボードへ]
+  Q1 -- はい --> O[claude-vscode.focus<br/>チャットを開く]
+  O --> B[元のエディタを前面に戻す<br/>（前面ならしない）]
+  B --> P[claude-vscode.insertAtMention]
   P --> Q3{例外が出た？}
   Q3 -- はい --> F
   Q3 -- いいえ --> OK([完了])
@@ -290,11 +301,13 @@ flowchart TD
 ## 7. 設計上の判断
 
 - **公式コマンドに委ねる**: 参照の形式やチャットへの挿入方法を公式と完全に一致させられ、コードも短い。
-- **公式拡張のコマンドに依存する**: 公式拡張の更新でコマンド名が変わると動かなくなる。その場合は `src/constants.ts` の `CLAUDE` を書き換える（キーボードショートカット画面で「Insert @-Mention」を検索 → 右クリック →「コマンドIDをコピー」）。
+- **公式拡張のコマンドに依存する**: 公式拡張の更新でコマンド名が変わると動かなくなる。そのときは `src/constants.ts` の `CLAUDE` を書き換える（キーボードショートカット画面で「Insert @-Mention」を検索 → 右クリック →「コマンドIDをコピー」）。
 - **失敗しても無駄にしない**: チャットに追加できないときはクリップボードにコピーし、手で貼れるようにしている。
 - **先にチャットを開く**: チャットが閉じていたり起動しきっていなかったりすると、公式コマンドは起動を 15 秒待って、参照を入れずに諦める（失敗も返さない）。そこで、公式コマンドの前に `claude-vscode.focus` でチャットを開いて起動させる。チャットをエディタのタブで開いていると、フォーカスが移って「アクティブなエディタ」がなくなるので、元のエディタを `showTextDocument` で前面に戻してから公式コマンドを呼ぶ（選択範囲はそのまま残る）。チャットが開いているかを調べる API はない（サイドバーのチャットはタブの一覧に出ない）ので、毎回開く。
-- **フォルダは貼り付けで入れる**: 公式コマンドはファイルしか扱えないため、公開されている `claude-vscode.focus` と VS Code 標準の貼り付けを組み合わせる。公式拡張の中身は使わない。欠点は、クリップボードの中身を上書きすることと、本当に入ったかを確かめられないこと（通知に「入っていなければ Ctrl+V」と書いている）。フォーカスが移るまでの待ち時間は `FOCUS_WAIT_MS`（800ms）。短いと、移りきる前の場所（エディタなど）に貼り付けてしまうので、待たされても気にならない 1 秒未満でなるべく長くしている（最初は 150ms だった）。テストでは 0 に書き換えて待たない。
-- **制御文字を含む参照は貼り付けない**: ファイル名に改行などの制御文字が入っていると、参照は自動で貼り付けず、クリップボードにコピーして警告を出すだけにする。フォーカスがチャットに移らなかったとき、貼り付けがエディタやターミナルに入ってしまうおそれがあり、改行がターミナルに入るとコマンドとして動きかねないため。
+- **前面に戻すのは必要なときだけ**: `bringToFront` は、そのエディタのドキュメントがまだアクティブなエディタなら何もしない。チャットがサイドバーにあるときは、ふつうこれになる。左右に分けたエディタで、わざわざ別のグループに開き直したり、余計なタブを作ったりしないため。`viewColumn` がないエディタや、ノートブックのセルも、`showTextDocument` で正しく戻せないので何もしない。
+- **フォルダ（と設定 paste のファイル）は貼り付けで入れる**: エクスプローラーのファイルは、初期設定では開かずに貼り付ける。ファイルを開くとタブが一瞬ちらつく。貼り付けはクリップボードを上書きし、フォーカスが移る時間にも左右される。どちらを取るかを設定 `rightClickMention.explorerFiles` で選べるようにした。公式コマンドはファイルしか扱えないため、公開されている `claude-vscode.focus` と VS Code 標準の貼り付けを組み合わせる。公式拡張の中身は使わない。欠点は、クリップボードの中身を上書きすることと、本当に入ったかを確かめられないこと（通知に「入っていなければ Ctrl+V」と書いている）。フォーカスが移るまでの待ち時間は `FOCUS_WAIT_MS`（800ms）。短いと、移りきる前の場所（エディタなど）に貼り付けてしまうので、待たされても気にならない 1 秒未満でなるべく長くしている（最初は 150ms だった）。テストでは 0 に書き換えて待たない。
+- **制御文字を含む参照は貼り付けない**: ファイル名に改行などの制御文字が入っていると、参照は自動で貼り付けず、クリップボードにコピーして警告を出すだけにする。見えない書式文字（`\p{Cf}`）や行区切り（`\p{Zl}` `\p{Zp}`）も同じに扱う。フォーカスがチャットに移らなかったとき、貼り付けがエディタやターミナルに入ってしまうおそれがあり、改行がターミナルに入るとコマンドとして動きかねないため。
+- **`@types/node` は Node 20 に固定する**: VS Code 1.94〜1.100 の拡張ホストは Node 20 で動く。テストは Node 26 で動かすが、本体が Node 20 にない API を使わないよう、型は Node 20 に合わせている。
 
 ---
 
@@ -302,13 +315,15 @@ flowchart TD
 
 | 項目 | 内容 | この拡張で対処できるか |
 |---|---|---|
-| 送り先 | 表示中の Claude のチャットが複数あると全部に入る | できない（公式の動作） |
+| 送り先 | 表示中の Claude のチャットが複数あるとすべてに入る | できない（公式の動作） |
 | 複数ウィンドウ | ウィンドウごとに独立して動く | 対処不要 |
 | ターミナル版 | 対象外。`useTerminal` が true のときはメニューを出さない | 対象外（意図的） |
 | 同じ名前のフォルダ | マルチルートで同名フォルダがあると参照が区別できない → `.code-workspace` の `"name"` で回避 | ワークスペース側で対処 |
 | 設定のスコープ | `claudeCode.*` はすべて window / application / machine スコープ。マルチルートではフォルダの settings.json に書いても効かない | できない（VS Code の仕様） |
 | リモート（WSL・SSH・Dev Container） | `extensionKind: ["workspace", "ui"]` で、リモート側でも手元の PC 側でも動けると宣言している。使う API（コマンドの呼び出し・クリップボード・`workspace.fs`・タブ）はどちら側からも使えるので、手元の PC に入れるだけで動く見込み。実機ではまだ確かめている途中 | 宣言で対処（要実機確認） |
 | チャットの画面が起動しきっていない | 公式拡張は 15 秒待っても起動しないと、参照を入れずに諦める（公式拡張のログに警告が出る）。コマンドは失敗を返さないので、この拡張からは分からない | できない（README の注意に書いている） |
+| コマンドパレットの表示条件 | エディタの 2 つのコマンドは `editorLangId` で出し分けている。フォーカスがエクスプローラーやターミナルにあると、ファイルを開いていてもパレットに出ない。出力パネルにフォーカスがあると出ることがある | 仕様として受け入れる |
+| Dependabot の待ち期間 | `cooldown` は依存ごとに数えるので、TypeScript と `oxlint-tsgolint` が別々の PR で届くことがある。片方だけ上がると CI が落ちることがある | CI が落ちたら次の更新を待つ／手で揃える |
 
 ---
 
@@ -331,7 +346,7 @@ npm run package   # = vsce package。直前に vscode:prepublish でコンパイ
 # 更新するときは package.json の version を上げてから再パッケージ → VSIX から再インストール
 ```
 
-配布用の VSIX は GitHub Actions（`.github/workflows/release.yml`）が作る。`v*` のタグを push すると、`package` ジョブ（読み取り権限のみ）がリンター・テスト・VSIX 作成を行い、`release` ジョブ（書き込み権限あり・依存は入れない）が Releases に添付する。リリースの説明文は `CHANGELOG.md` の該当バージョンの項目から作る（項目がないときや、中身が空白だけのときは失敗する）。手動実行では Releases は作らず、VSIX を Actions の成果物に置くだけ。手順は README の「リリースの手順」を参照。リリースの前に、[手動テストの手順](MANUAL_TEST.md) で、チャットに本当に入るかを確かめる。
+配布用の VSIX は GitHub Actions（`.github/workflows/release.yml`）が作る。`v*` のタグを push すると、`package` ジョブ（読み取り権限のみ）がリンター・テスト・VSIX 作成を行い、`release` ジョブ（書き込み権限あり・依存は入れない）が Releases に添付する。リリースの説明文は `CHANGELOG.md` の該当バージョンの項目から作る（項目がないときや、中身が空白だけのときは失敗する）。`release` ジョブはタグの push のとき（`github.event_name == 'push'`）だけ動く。手動実行では、タグを選んでも Releases は作らず、VSIX を Actions の成果物に置くだけ。手順は README の「リリースの手順」を参照。リリースの前に、[手動テストの手順](MANUAL_TEST.md) で、チャットに本当に入るかを確かめる。
 
 PR と main への push では `.github/workflows/ci.yml` が `npm ci`・リンター（Oxlint）・ユニットテスト・VSIX 作成を確かめる。Dependabot の PR もここで確かめられるので、壊れる更新は取り込む前に気づける（TypeScript 7 への更新で `npm ci` が失敗したことがきっかけ）。
 
@@ -339,8 +354,10 @@ PR と main への push では `.github/workflows/ci.yml` が `npm ci`・リン�
 
 - TypeScript 7 に対応したリンターとして Oxlint を使う。型情報を使うルールは `oxlint-tsgolint`（TypeScript 7 の Go 版の上で動く）が担当する。
   - 以前は ESLint ＋ typescript-eslint を使っていたが、typescript-eslint が TypeScript 7 に対応していない（7 には JS から使う API がまだない）ため入れ替えた。
-  - `oxlint-tsgolint` は決まった TypeScript のバージョンに合わせて作られているので、TypeScript を上げるときは一緒に上げる（Dependabot は devDependencies を 1 つの PR にまとめるので、同時に上がる）。
+  - `oxlint-tsgolint` は決まった TypeScript のバージョンに合わせて作られているので、TypeScript を上げるときは一緒に上げる。Dependabot は devDependencies を 1 つの PR にまとめるが、待ち期間（`cooldown`）は依存ごとに数えるので、別々の PR で届くことがある（→ 8 章）。
 - プラグインは指定せず、既定のもの（unicorn・typescript・oxc）を使う。
+- import には `node:` を付ける（unicorn の `prefer-node-protocol`）。
+- `npm run lint` は `--report-unused-disable-directives` 付きで動かし、いらなくなったルールの無効化コメントも見つける。
 - ルールは、まず間違いを見つける `correctness` の一式と、`await` 忘れを見つける `typescript/no-floating-promises`、Promise を渡してはいけない場所に渡していないかを見る `typescript/no-misused-promises` だけにして、増やしすぎない。
 - `no-floating-promises` には `checkThenables: true` を付けている。VS Code の API は `Promise` ではなく `Thenable` を返すので、付けないと見逃す（付けない状態で見逃すことを確かめた）。わざと待たない通知には `void` を付ける。
 - `node:test` の `describe` / `it` は Promise を返すが待たなくてよいので、このルールの対象から外している。
@@ -353,7 +370,7 @@ PR と main への push では `.github/workflows/ci.yml` が `npm ci`・リン�
 - 外部の Action はコミットの SHA で固定している。
 - vsce は `npx --no-install vsce` で呼び、`package.json` で固定したもの以外をダウンロードして動かさない。
 - `release` ジョブは、VSIX に出どころの証明（`actions/attest-build-provenance`）を付ける。`gh attestation verify <vsix> -R kip2/right-click-mention` で確かめられる。
-- どちらのワークフローにも `concurrency`（同じものが重なって動かないようにする）と `timeout-minutes`（止まったままにしない）を付けている。
+- どちらのワークフローにも `concurrency`（同じものが重なって動かないようにする）と `timeout-minutes`（止まったままにしない）を付けている。`ci.yml` で、動いている途中のものを止めて新しいほうを動かすのは PR のときだけ。main への push では止めない。
 - `.github/dependabot.yml` で、Action と npm の devDependencies の更新を月 1 回 PR にする（`@types/vscode` は `engines.vscode` に合わせて手で上げる）。どちらも `cooldown` で、新しいバージョンが出てから 7 日たつまで提案しない（出た直後に乗っ取られたパッケージをすぐ取り込まないため）。
 
 ---
@@ -380,7 +397,7 @@ flowchart LR
   EXT["out/extension.js<br/>（src/ をコンパイル）"]
   U1 & U2 --> EXT
   I --> EXT
-  U3 -.->|~/.vscode/extensions の<br/>公式 package.json| CL["公式 Claude 拡張"]
+  U3 -.->|~/.vscode/extensions の<br/>公式 package.json| CL["公式拡張"]
 ```
 
 ### 構成
@@ -390,7 +407,7 @@ flowchart LR
 | `src/test/helpers/vscodeMock.ts` | VS Code API のモック。`asRelativePath` のマルチルート挙動、`Selection` の正規化、バイナリで開けないファイルなどを再現。`setup()` でモック＋拡張＋activate を一度に用意（`out/` のファイルは毎回読み込み直す） | — |
 | `src/test/unit/reference.test.ts` | 行番号（1 行・複数行・次行先頭で終わる・逆方向選択）、フォルダの `/`、空白でつなぐ。`reference.ts` をモックなしで直接 import する | 12 |
 | `src/test/unit/workspacePath.test.ts` | パス形式（単一・マルチルート・別の場所・入れ子・ワークスペース外）。コマンドを実行し、コピーされた参照で確かめる | 6 |
-| `src/test/unit/commands.test.ts` | コマンド登録と dispose、`extension.ts` が activate / deactivate だけを出すこと、送信の分岐（成功・拡張なし・例外・reject）、エクスプローラー（単一・複数・空・引数なし・バイナリ混在・フォルダの貼り付け・貼り付け失敗・拡張なし・ファイルとフォルダの混在・コピーと警告を 1 回にまとめる・同じ理由を 1 回だけ書く）、失敗の経路（フォーカス後の貼り付け失敗・フォルダか調べられない・エディタで表示できない・シンボリックリンクのフォルダ）、開いたタブを閉じる（入れたあとで閉じる・もともと開いていたものは残す・コピーに回っても閉じる・閉じられなくても続ける・フォーカスを保つ・別のグループにだけあったもの・パスの大文字小文字の違い・選択とカーソルを戻す・フォルダなどは触らない・エディタの右クリックでは閉じない）、改行を含む参照は貼り付けない、貼り付け前の待ち時間が 1 秒未満、チャットを先に開いて元のエディタを前面に戻す（チャットがエディタのタブにある場合も）、設定の貼り付け（初期設定）でファイルを開かずに貼り付ける・知らない値は貼り付け扱い・貼り付けの失敗・拡張なし・改行を含む名前・エディタの右クリックには関係しない | 60 |
+| `src/test/unit/commands.test.ts` | コマンド登録と dispose、`extension.ts` が activate / deactivate だけを出すこと、送信の分岐（成功・拡張なし・例外・reject）、エクスプローラー（単一・複数・空・引数なし・バイナリ混在・フォルダの貼り付け・貼り付け失敗・拡張なし・ファイルとフォルダの混在・コピーと警告を 1 回にまとめる・同じ理由を 1 回だけ書く）、失敗の経路（フォーカス後の貼り付け失敗・フォルダか調べられない・エディタで表示できない・シンボリックリンクのフォルダ）、開いたタブを閉じる（入れたあとで閉じる・もともと開いていたものは残す・コピーに回っても閉じる・閉じられなくても続ける・フォーカスを保つ・別のグループにだけあったもの・パスの大文字小文字の違い・選択とカーソルを戻す・フォルダなどは触らない・エディタの右クリックでは閉じない）、改行を含む参照は貼り付けない、貼り付け前の待ち時間が 1 秒未満、チャットを先に開いて元のエディタを前面に戻す（チャットがエディタのタブにある場合も）、設定の貼り付け（初期設定）でファイルを開かずに貼り付ける・知らない値は貼り付け扱い・貼り付けの失敗・拡張なし・改行を含む名前・エディタの右クリックには関係しない、前面に戻す処理（まだ前面なら戻さない・選択ごと元のグループへ・失敗しても続ける・ノートブックとグループ不明は戻さない）、送るものがないときの通知、貼り付けの通知の件数、見えない文字、設定 open で元のグループに開く、設定を 1 回だけ読む | 70 |
 | `src/test/unit/manifest.test.ts` | package.json の基本項目と category、宣言とコード（`COMMANDS`）の一致、メニューの `when` 条件、制限モードの宣言、Remote の宣言（extensionKind）、公式拡張にコマンドが存在するか、設定の宣言（名前・選べる値・初期設定・見出し） | 21 |
 | `src/test/integration/runTest.ts` | `@vscode/test-electron` でテスト用 VS Code を起動（他の拡張は無効） | — |
 | `src/test/integration/suite/extension.itest.ts` | 実 VS Code 上でマルチルートのパス、選択の扱い、エクスプローラー送信、開いたタブを閉じる・もともと開いていたタブを残す・選択範囲を元に戻す・プレビューのタブを消さない、バイナリファイル、フォルダの判定、ファイルとフォルダの混在、設定 open と初期設定（貼り付け）の両方 | 21 |

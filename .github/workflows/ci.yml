@@ -1,4 +1,4 @@
-# PR と main への push で、依存のインストール・リンター（Oxlint）・ユニットテストを動かす
+# PR と main への push で、依存のインストール・リンター（Oxlint）・ユニットテスト・VSIX の作成を確かめる
 # Dependabot の PR もここで確かめるので、壊れる更新は取り込む前に気づける
 name: CI
 
@@ -10,10 +10,10 @@ on:
 permissions:
   contents: read
 
-# 同じブランチで新しく push されたら、古い実行は止める
+# PR で新しく push されたら、古い実行は止める（main への push は止めずに、すべて確かめる）
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:

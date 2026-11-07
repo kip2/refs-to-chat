@@ -1,10 +1,10 @@
 // package.json（マニフェスト）とコードの整合性、公式拡張との互換性のテスト
 
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import * as assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import * as os from 'os';
-import * as path from 'path';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { CLAUDE, COMMANDS, SETTINGS } from '../../constants';
 import { setup } from '../helpers/vscodeMock';
 
@@ -53,7 +53,7 @@ describe('package.json の基本項目', () => {
     assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
   });
 
-  it('VS Code 1.94 以上（公式 Claude 拡張と同じ）', () => {
+  it('VS Code 1.94 以上（公式拡張と同じ）', () => {
     assert.equal(pkg.engines.vscode, '^1.94.0');
   });
 
@@ -88,10 +88,10 @@ describe('メニューの表示条件', () => {
   const explorer = menus['explorer/context'];
   const palette = menus.commandPalette;
 
-  /** メニューの中から、そのコマンドの when を取り出す（無ければテストを失敗させる） */
+  /** メニューの中から、そのコマンドの when を取り出す（なければテストを失敗させる） */
   function whenOf(items: MenuItem[], command: string): string {
     const item = items.find((m) => m.command === command);
-    assert.ok(item?.when, `${command} の when が無い`);
+    assert.ok(item?.when, `${command} の when がない`);
     return item.when;
   }
 
@@ -139,7 +139,7 @@ describe('設定の宣言', () => {
   const prop = pkg.contributes.configuration?.properties[key];
 
   it('エクスプローラーのファイルの入れ方を、package.json と constants.ts で同じ名前にしている', () => {
-    assert.ok(prop, `${key} が package.json に無い`);
+    assert.ok(prop, `${key} が package.json にない`);
   });
 
   it('選べるのは paste と open で、初期設定は paste', () => {
@@ -181,9 +181,9 @@ describe('公式 Claude Code 拡張との互換性', () => {
     const claude = readManifest(dir);
     const ids = claude.contributes.commands.map((c) => c.command);
     for (const cmd of [CLAUDE.insertMentionCommand, CLAUDE.focusInputCommand]) {
-      assert.ok(ids.includes(cmd), `${cmd} が ${dir} に無い`);
+      assert.ok(ids.includes(cmd), `${cmd} が ${dir} にない`);
     }
-    // 拡張IDは大文字小文字を区別しない（公式は publisher が "Anthropic"）
+    // 拡張 ID は大文字小文字を区別しない（公式は publisher が "Anthropic"）
     assert.equal(`${claude.publisher}.${claude.name}`.toLowerCase(), CLAUDE.extensionId.toLowerCase());
   });
 
@@ -192,7 +192,7 @@ describe('公式 Claude Code 拡張との互換性', () => {
     const claude = readManifest(dir);
     const palette = claude.contributes.menus.commandPalette ?? [];
     const entry = palette.find((m) => m.command === CLAUDE.insertMentionCommand);
-    assert.ok(entry, 'commandPalette に insertAtMention が無い');
+    assert.ok(entry, 'commandPalette に insertAtMention がない');
     assert.equal(entry.when, TERMINAL_GUARD);
   });
 });

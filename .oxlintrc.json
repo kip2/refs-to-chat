@@ -15,6 +15,7 @@
         "allowForKnownSafeCalls": [{ "from": "package", "package": "node:test", "name": ["describe", "it"] }]
       }
     ],
-    "typescript/no-misused-promises": "error"
+    "typescript/no-misused-promises": "error",
+    "unicorn/prefer-node-protocol": "error"
   }
 }

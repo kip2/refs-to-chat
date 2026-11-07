@@ -35,7 +35,7 @@
     "compile": "tsc -p ./",
     "build": "npm run clean && npm run compile",
     "watch": "tsc -watch -p ./",
-    "lint": "oxlint --type-aware",
+    "lint": "oxlint --report-unused-disable-directives",
     "pretest": "npm run build",
     "test": "node --test \"out/test/unit/**/*.test.js\"",
     "test:spec": "npm run build && node --test --test-reporter=spec \"out/test/unit/**/*.test.js\"",
@@ -46,7 +46,7 @@
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
-    "@types/node": "^26.6.6",
+    "@types/node": "~20.19.43",
     "@types/vscode": "~1.94.0",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^4.1.0",
@@ -66,11 +66,12 @@
             "open"
           ],
           "enumDescriptions": [
-            "ファイルを開かずに、参照をチャットの入力欄に貼り付ける（タブがちらつかない。クリップボードは上書きされる）",
-            "ファイルを一瞬開いて、公式拡張のコマンドで入れる（確実。入れたあと、開いたタブは閉じる）"
+            "ファイルを開かずに、参照をチャットの入力欄に貼り付ける。タブは開かない。クリップボードの中身は参照に置き換わる",
+            "ファイルを一瞬開いて、公式拡張のコマンドで入れる。クリップボードは変わらない。開いたタブは入れたあとで閉じる"
           ],
           "default": "paste",
-          "markdownDescription": "エクスプローラーから「Claudeのチャットに追加」したときの、ファイルの入れ方です。フォルダはどちらでも貼り付けで入れます。エディタの右クリックには関係ありません。"
+          "scope": "window",
+          "markdownDescription": "エクスプローラーから「Claudeのチャットに追加」したときの、ファイルの入れ方です。フォルダと、画像などテキストとして開けないファイルは、どちらの設定でも貼り付けで入れます。エディタの右クリックには関係ありません。"
         }
       }
     },

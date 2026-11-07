@@ -1,4 +1,4 @@
-// 公式 Claude Code 拡張とのやり取り
+// 公式の Claude Code 拡張とのやり取り
 // 中身には触れず、公開コマンドを呼ぶだけ
 
 import * as vscode from 'vscode';
@@ -41,8 +41,16 @@ async function openChat(): Promise<void> {
 }
 
 async function bringToFront(editor: vscode.TextEditor): Promise<void> {
+  // まだ前面にあれば何もしない（チャットがサイドバーにあるときは、たいていこれ）
+  if (vscode.window.activeTextEditor?.document === editor.document) return;
+  // どのグループか分からないときと、ノートブックのセルは、戻すと別の場所に普通のタブが開いてしまう
+  if (editor.viewColumn === undefined || editor.document.uri.scheme === 'vscode-notebook-cell') return;
   try {
-    await vscode.window.showTextDocument(editor.document, { viewColumn: editor.viewColumn, preserveFocus: false });
+    await vscode.window.showTextDocument(editor.document, {
+      viewColumn: editor.viewColumn,
+      preserveFocus: false,
+      selection: editor.selection,
+    });
   } catch (err) {
     console.error(LOG_PREFIX, err);
   }

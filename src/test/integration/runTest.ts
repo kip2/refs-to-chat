@@ -1,12 +1,12 @@
 // 統合テストの起動スクリプト
 // テスト用の VS Code を（初回だけ）ダウンロードし、マルチルートのワークスペースを開いて
 // suite/ 以下の *.itest.js を本物の VS Code API の上で実行する
-// 他の拡張（公式 Claude 拡張を含む）は無効にするので、フォールバック経路を確かめるテストになる
+// ほかの拡張（公式拡張を含む）は無効にするので、コピーに回る経路を確かめるテストになる
 
-import * as path from 'path';
+import * as path from 'node:path';
 import { runTests } from '@vscode/test-electron';
 
-// VS Code の中（ターミナルや拡張）から実行すると ELECTRON_RUN_AS_NODE=1 が引き継がれ、
+// VS Code の中（ターミナルや拡張）から実行すると ELECTRON_RUN_AS_NODE=1 が引き継がれる
 // テスト用の VS Code が Node.js として起動してしまう
 // テスト用の VS Code には渡さない
 delete process.env.ELECTRON_RUN_AS_NODE;

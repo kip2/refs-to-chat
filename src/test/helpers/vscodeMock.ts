@@ -2,8 +2,8 @@
 // 拡張（out/*.js）が使う部分だけを再現し、呼び出しを記録する
 // 拡張が CommonJS の require('vscode') でモックを読むことを前提にしている
 
-import * as path from 'path';
-import Module = require('module');
+import * as path from 'node:path';
+import Module = require('node:module');
 
 // 型だけを使う
 // 実行時には読み込まないので、モックより先に本物が読み込まれることはない
@@ -66,6 +66,8 @@ interface MockDocument {
 /** 本物と同じく、selection は selections の先頭 */
 export class MockEditor {
   selections: Range[];
+  /** どのエディタグループにあるか（1: 今のグループ、2: 別のグループ） */
+  viewColumn = 1;
   constructor(
     readonly document: MockDocument,
     selection: Range = emptySelection(),
@@ -112,8 +114,10 @@ export interface MockOptions {
   documentPath?: (fsPath: string) => string;
   /** tabGroups.close が例外を投げる */
   closeFails?: boolean;
-  /** チャットをエディタのタブで開いている（Focus input でアクティブなエディタがなくなる） */
+  /** チャットをエディタのタブで開いている（チャットにフォーカスを移すと、アクティブなエディタがなくなる） */
   chatInEditorTab?: boolean;
+  /** チャットのタブがあるエディタグループ（chatInEditorTab のとき、チャットを開くとこのグループが今のグループになる） */
+  chatColumn?: number;
   /** 設定（例: `{ 'rightClickMention.explorerFiles': 'open' }`） */
   settings?: Record<string, unknown>;
 }
@@ -141,7 +145,7 @@ export interface MockState {
   /** openTextDocument に渡されたパス */
   opened: string[];
   /** showTextDocument に渡されたもの */
-  shown: { fsPath: string; options: { preview?: boolean; preserveFocus?: boolean; viewColumn?: number } }[];
+  shown: { fsPath: string; options: { preview?: boolean; preserveFocus?: boolean; viewColumn?: number; selection?: Range } }[];
   /** 今のエディタグループのタブ */
   tabs: MockTab[];
   /** 別のエディタグループのタブ */
@@ -152,6 +156,10 @@ export interface MockState {
   closePreserveFocus: (boolean | undefined)[];
   /** パス → そのファイルのエディタ（もう一度前面に出すと同じエディタが出てくる） */
   editors: Map<string, MockEditor>;
+  /** 今のエディタグループ（1 か 2） */
+  activeColumn: number;
+  /** コマンドの呼び出し（cmd:）とエディタの表示（show:）の順番 */
+  log: string[];
 }
 
 export function createVscodeMock(opts: MockOptions = {}) {
@@ -176,7 +184,11 @@ export function createVscodeMock(opts: MockOptions = {}) {
     closed: [],
     closePreserveFocus: [],
     editors: new Map(),
+    activeColumn: 1,
+    log: [],
   };
+  const tabsOfColumn = (column: number) => (column === 2 ? state.otherTabs : state.tabs);
+  const groupOf = (column: number) => ({ viewColumn: column, tabs: tabsOfColumn(column) });
   const hasTabIn = (tabs: MockTab[], u: MockUri) => tabs.some((t) => t.input.uri.toString() === u.toString());
 
   const FileType = { Unknown: 0, File: 1, Directory: 2, SymbolicLink: 64 };
@@ -240,26 +252,36 @@ export function createVscodeMock(opts: MockOptions = {}) {
         active = editor;
         if (editor && !state.editors.has(editor.document.uri.fsPath)) state.editors.set(editor.document.uri.fsPath, editor);
       },
-      // 本物と同じく、今のエディタグループに開く（別のグループにだけあるときは、今のグループに新しいタブができる）
+      get visibleTextEditors(): MockEditor[] {
+        return [...state.editors.values()];
+      },
+      // 本物と同じく、指定がなければ今のエディタグループに開く
+      // 別のグループにだけあるときも、開いた先のグループに新しいタブができる
       async showTextDocument(doc: MockDocument, options: MockState['shown'][number]['options']) {
         state.shown.push({ fsPath: doc.uri.fsPath, options });
         if (is(opts.showFails, doc.uri.fsPath)) throw new Error('Could not open editor');
         const key = doc.uri.fsPath;
-        if (!hasTabIn(state.tabs, doc.uri)) state.tabs.push({ input: new TabInputText(doc.uri) });
+        const column = options.viewColumn ?? state.activeColumn;
+        state.log.push(`show:${key}@${column}`);
+        const tabs = tabsOfColumn(column);
+        if (!hasTabIn(tabs, doc.uri)) tabs.push({ input: new TabInputText(doc.uri) });
         let editor = state.editors.get(key);
         if (!editor) {
           editor = new MockEditor(doc, opts.selections?.[key]);
           state.editors.set(key, editor);
         }
+        if (options.selection) editor.selection = options.selection;
+        editor.viewColumn = column;
+        state.activeColumn = column;
         vscode.window.activeTextEditor = editor;
         return editor;
       },
       tabGroups: {
         get all() {
-          return [{ tabs: state.tabs }, { tabs: state.otherTabs }];
+          return [groupOf(1), groupOf(2)];
         },
         get activeTabGroup() {
-          return { tabs: state.tabs };
+          return groupOf(state.activeColumn);
         },
         async close(tabs: MockTab | MockTab[], preserveFocus?: boolean) {
           state.closePreserveFocus.push(preserveFocus);
@@ -289,9 +311,18 @@ export function createVscodeMock(opts: MockOptions = {}) {
       },
       async executeCommand(id: string, ...args: unknown[]) {
         state.executed.push(id);
+        state.log.push(`cmd:${id}`);
+        // 公式の「@メンションを入れる」は、エディタから参照を作ってから、チャットにフォーカスを移す
+        // テストの onExecute は「参照を作る時点」なので、フォーカスを移す前に呼ぶ
+        const result = opts.onExecute?.(id, ...args);
         // チャットをエディタのタブで開いていると、チャットに移ったときにアクティブなエディタがなくなる
-        if (id === 'claude-vscode.focus' && opts.chatInEditorTab) vscode.window.activeTextEditor = undefined;
-        return opts.onExecute?.(id, ...args);
+        // 今のグループも、チャットのタブがあるグループに移る
+        const movesToChat = id === 'claude-vscode.focus' || id === 'claude-vscode.insertAtMention';
+        if (movesToChat && opts.chatInEditorTab) {
+          vscode.window.activeTextEditor = undefined;
+          state.activeColumn = opts.chatColumn ?? state.activeColumn;
+        }
+        return result;
       },
     },
     extensions: {
