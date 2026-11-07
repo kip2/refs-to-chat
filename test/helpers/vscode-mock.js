@@ -1,4 +1,5 @@
-// VS Code API の最小限のモック。拡張（out/*.js）が使う部分だけを再現し、呼び出しを記録する。
+// VS Code API の最小限のモック
+// 拡張（out/*.js）が使う部分だけを再現し、呼び出しを記録する
 'use strict';
 
 const path = require('path');
@@ -82,7 +83,8 @@ function createVscodeMock(opts = {}) {
           return { type, ctime: 0, mtime: 0, size: 0 };
         },
       },
-      // asRelativePath の再現。第 2 引数を省くと、フォルダが 2 つ以上のときだけ true
+      // asRelativePath の再現
+      // 第 2 引数を省くと、フォルダが 2 つ以上のときだけ true
       asRelativePath(target, includeWorkspaceFolder) {
         const p = typeof target === 'string' ? target : target.fsPath;
         const folder = [...folders]
@@ -110,7 +112,7 @@ function createVscodeMock(opts = {}) {
         vscode.window.activeTextEditor = editor;
         return editor;
       },
-      // 本物と同じく Thenable を返す（ユーザーが閉じるまで解決しない想定。ここではすぐ undefined）
+      // 本物と同じく Thenable を返す（ユーザーが閉じるまで解決しない想定、ここではすぐ undefined）
       showWarningMessage: (m) => { state.warnings.push(m); return Promise.resolve(undefined); },
       showInformationMessage: (m) => { state.infos.push(m); return Promise.resolve(undefined); },
     },
@@ -143,8 +145,8 @@ const OUT_DIR = path.resolve(__dirname, '../../out');
 const EXT_PATH = path.join(OUT_DIR, 'extension.js');
 
 /**
- * モックを差し込んで out/extension.js を毎回まっさらに読み込む。
- * out/ の各ファイルが 'vscode' を読むので、テストごとにモックを替えられるよう out/ のキャッシュを全部消す。
+ * モックを差し込んで out/extension.js を毎回まっさらに読み込む
+ * out/ の各ファイルが 'vscode' を読むので、テストごとにモックを替えられるよう out/ のキャッシュを全部消す
  */
 function loadExtension(vscode) {
   for (const key of Object.keys(require.cache)) {

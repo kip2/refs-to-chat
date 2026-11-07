@@ -1,5 +1,5 @@
-// 公式コマンドでチャットに入れられなかった参照を、まとめて貼り付けるかコピーする。
-// 複数あっても、クリップボードへの書き込みと通知は 1 回にまとめる。
+// 公式コマンドでチャットに入れられなかった参照を、まとめて貼り付けるかコピーする
+// 複数あっても、クリップボードへの書き込みと通知は 1 回にまとめる
 
 import * as vscode from 'vscode';
 import { type InsertFailure, isClaudeInstalled, pasteClipboardIntoChat } from './claudeChat';
@@ -21,7 +21,7 @@ const REASON_MESSAGES: Record<FallbackReason, string> = {
 };
 
 /**
- * 後回しにした参照をチャットに届ける。
+ * 後回しにした参照をチャットに届ける
  * - フォルダ・開けないファイルだけ（公式拡張あり）: 貼り付けで入れる
  * - それ以外、または貼り付けを呼べないとき: コピーして警告を出す
  */
@@ -45,7 +45,10 @@ function canPaste(reason: FallbackReason): boolean {
   return reason === 'folder' || reason === 'notText';
 }
 
-/** コピーしてチャットに貼り付ける。貼り付けを呼べなかったら false（クリップボードには入ったまま） */
+/**
+ * コピーしてチャットに貼り付ける
+ * 貼り付けを呼べなかったら false（クリップボードには入ったまま）
+ */
 async function pasteIntoChat(refs: readonly string[]): Promise<boolean> {
   const text = joinReferences(refs);
   await vscode.env.clipboard.writeText(text);

@@ -1,5 +1,6 @@
-// 参照のパス形式のテスト。公式拡張なしで実行し、クリップボードの中身で確かめる。
-// パスの計算はモックの asRelativePath なので、本物の動きは統合テストで確かめる。
+// 参照のパス形式のテスト
+// 公式拡張なしで実行し、クリップボードの中身で確かめる
+// パスの計算はモックの asRelativePath なので、本物の動きは統合テストで確かめる
 'use strict';
 
 const { describe, it, beforeEach, afterEach } = require('node:test');

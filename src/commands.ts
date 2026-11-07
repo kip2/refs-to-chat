@@ -1,4 +1,4 @@
-// 右クリックメニューから呼ばれる、2 つのコマンドの処理。
+// 右クリックメニューから呼ばれる、2 つのコマンドの処理
 
 import * as vscode from 'vscode';
 import { insertActiveEditorMention } from './claudeChat';
@@ -22,8 +22,9 @@ export async function addActiveEditorToChat(): Promise<void> {
 }
 
 /**
- * エクスプローラーの右クリック（ファイル・フォルダ、複数選択可）。
- * 引数は (右クリックしたもの, 選択中の一覧)。コマンドパレットから呼ぶと両方 undefined のことがある。
+ * エクスプローラーの右クリック（ファイル・フォルダ、複数選択可）
+ * 引数は (右クリックしたもの, 選択中の一覧)
+ * コマンドパレットから呼ぶと両方 undefined のことがある
  */
 export async function addExplorerItemsToChat(
   clicked?: vscode.Uri,

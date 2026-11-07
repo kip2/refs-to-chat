@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { LOG_PREFIX } from './constants';
 
 /**
- * 参照に使うパス（公式拡張と同じ形式）。
+ * 参照に使うパス（公式拡張と同じ形式）
  * 単一フォルダ: `src/app.ts` / マルチルート: `フォルダ名/src/app.ts` / ワークスペースの外: 絶対パス
  */
 export function workspacePath(uri: vscode.Uri): string {
@@ -20,8 +20,9 @@ export async function isFolder(uri: vscode.Uri): Promise<boolean> {
 }
 
 /**
- * 選択なしで開いてアクティブにする。公式コマンドがアクティブなエディタから参照を作るため。
- * 画像など、開けなければ undefined。
+ * 選択なしで開いてアクティブにする
+ * 公式コマンドがアクティブなエディタから参照を作るため
+ * 画像など、開けなければ undefined
  */
 export async function openAsActiveEditor(uri: vscode.Uri): Promise<vscode.TextEditor | undefined> {
   try {

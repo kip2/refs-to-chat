@@ -1,18 +1,27 @@
-// 拡張全体で使う定数。vscode に依存しないので、テストから直接読み込める。
+// 拡張全体で使う定数
 
-/** コマンド ID。公開済みなので変えない（ユーザーのショートカットが壊れる）。package.json と一致させる */
+/** コマンド ID */
 export const COMMANDS = {
   sendSelection: 'rightClickMention.sendSelection',
   sendCurrentFile: 'rightClickMention.sendCurrentFile',
   sendFile: 'rightClickMention.sendFile',
 } as const;
 
-/** 公式 Claude Code 拡張。使うのはコマンドパレットに出ている公開コマンドだけ */
+/**
+ * 公式 Claude Code 拡張
+ * 使うのはコマンドパレットに出ている公開コマンドだけ
+ */
 export const CLAUDE = {
   extensionId: 'anthropic.claude-code',
-  /** 「Insert @-Mention Reference」（Alt+K）。アクティブなエディタの参照をチャットに入れる */
+  /**
+   * 「Insert @-Mention Reference」（Alt+K）
+   * アクティブなエディタの参照をチャットに入れる
+   */
   insertMentionCommand: 'claude-vscode.insertAtMention',
-  /** 「Focus input」。チャットの入力欄にフォーカスを移す */
+  /**
+   * 「Focus input」
+   * チャットの入力欄にフォーカスを移す
+   */
   focusInputCommand: 'claude-vscode.focus',
 } as const;
 

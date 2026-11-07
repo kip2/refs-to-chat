@@ -1,6 +1,6 @@
-// 実際の VS Code 上で動かすテスト。
+// 実際の VS Code 上で動かすテスト
 // ワークスペース: test/fixtures/multi-root（alpha / beta の2フォルダ）
-// 公式 Claude 拡張は無効なので、送信結果はクリップボードの中身で確認する。
+// 公式 Claude 拡張は無効なので、送信結果はクリップボードの中身で確認する
 'use strict';
 
 const assert = require('assert');

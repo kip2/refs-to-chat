@@ -2,9 +2,9 @@
 # - タグ v* を push したとき: テスト → vsix を作る → GitHub の Releases に添付
 # - ブランチを選んで手動で実行: テスト → vsix を作る → Actions の成果物に置くだけ
 #
-# 安全のため、依存を入れてビルドするジョブ（package）は読み取り権限だけで動かす。
-# Releases に書き込むジョブ（release）は依存を入れず、作った vsix を受け取って添付するだけにする。
-# 外部の Action は、タグの付け替えで中身が変わらないようにコミットの SHA で固定している。
+# 安全のため、依存を入れてビルドするジョブ（package）は読み取り権限だけで動かす
+# Releases に書き込むジョブ（release）は依存を入れず、作った vsix を受け取って添付するだけにする
+# 外部の Action は、タグの付け替えで中身が変わらないようにコミットの SHA で固定している
 name: Release
 
 on:
@@ -73,8 +73,8 @@ jobs:
         with:
           name: vsix
 
-      # この vsix がこのリポジトリの Actions で作られたことを証明する。
-      # ダウンロードした人は gh attestation verify <vsix> -R kip2/right-click-mention で確かめられる。
+      # この vsix がこのリポジトリの Actions で作られたことを証明する
+      # ダウンロードした人は gh attestation verify <vsix> -R kip2/right-click-mention で確かめられる
       - name: 出どころの証明を付ける
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:

@@ -1,5 +1,5 @@
-// 参照の文字列（@path#start-end）を作る処理のテスト。
-// reference.js は vscode に依存しないので、モックなしで直接読み込む。
+// 参照の文字列（@path#start-end）を作る処理のテスト
+// reference.js は vscode に依存しないので、モックなしで直接読み込む
 'use strict';
 
 const { describe, it } = require('node:test');

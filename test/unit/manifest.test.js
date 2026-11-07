@@ -97,8 +97,9 @@ describe('メニューの表示条件', () => {
   });
 });
 
-// インストール済みの公式拡張に、呼ぶコマンドがまだあるか確かめる（名前が変わったら気づける）。
-// 見つからなければスキップ。場所は CLAUDE_EXT_DIR で指定できる。
+// インストール済みの公式拡張に、呼ぶコマンドがまだあるか確かめる（名前が変わったら気づける）
+// 見つからなければスキップ
+// 場所は CLAUDE_EXT_DIR で指定できる
 function findClaudeExtension() {
   const candidates = [];
   if (process.env.CLAUDE_EXT_DIR) candidates.push(process.env.CLAUDE_EXT_DIR);
