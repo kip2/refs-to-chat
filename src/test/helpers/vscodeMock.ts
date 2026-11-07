@@ -112,6 +112,8 @@ export interface MockOptions {
   documentPath?: (fsPath: string) => string;
   /** tabGroups.close が例外を投げる */
   closeFails?: boolean;
+  /** チャットをエディタのタブで開いている（Focus input でアクティブなエディタがなくなる） */
+  chatInEditorTab?: boolean;
 }
 
 /** VS Code の TabInputText（テキストエディタのタブ） */
@@ -137,7 +139,7 @@ export interface MockState {
   /** openTextDocument に渡されたパス */
   opened: string[];
   /** showTextDocument に渡されたもの */
-  shown: { fsPath: string; options: { preview?: boolean; preserveFocus?: boolean } }[];
+  shown: { fsPath: string; options: { preview?: boolean; preserveFocus?: boolean; viewColumn?: number } }[];
   /** 今のエディタグループのタブ */
   tabs: MockTab[];
   /** 別のエディタグループのタブ */
@@ -180,6 +182,7 @@ export function createVscodeMock(opts: MockOptions = {}) {
   // 本物の通知は、ユーザーが閉じるまで解決しない
   // うっかり await すると、テストが止まって気づける
   const pending = () => new Promise<undefined>(() => {});
+  let active: MockEditor | undefined;
 
   const vscode = {
     Range,
@@ -218,7 +221,14 @@ export function createVscodeMock(opts: MockOptions = {}) {
       },
     },
     window: {
-      activeTextEditor: undefined as MockEditor | undefined,
+      // テストが直接入れたエディタも覚えておき、同じファイルをもう一度前面に出したら同じエディタを返す
+      get activeTextEditor(): MockEditor | undefined {
+        return active;
+      },
+      set activeTextEditor(editor: MockEditor | undefined) {
+        active = editor;
+        if (editor && !state.editors.has(editor.document.uri.fsPath)) state.editors.set(editor.document.uri.fsPath, editor);
+      },
       // 本物と同じく、今のエディタグループに開く（別のグループにだけあるときは、今のグループに新しいタブができる）
       async showTextDocument(doc: MockDocument, options: MockState['shown'][number]['options']) {
         state.shown.push({ fsPath: doc.uri.fsPath, options });
@@ -268,6 +278,8 @@ export function createVscodeMock(opts: MockOptions = {}) {
       },
       async executeCommand(id: string, ...args: unknown[]) {
         state.executed.push(id);
+        // チャットをエディタのタブで開いていると、チャットに移ったときにアクティブなエディタがなくなる
+        if (id === 'claude-vscode.focus' && opts.chatInEditorTab) vscode.window.activeTextEditor = undefined;
         return opts.onExecute?.(id, ...args);
       },
     },

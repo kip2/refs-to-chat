@@ -63,7 +63,7 @@ describe('エディタからの送信（sendSelection / sendCurrentFile）', () 
       const { vscode, state, run } = setup();
       vscode.window.activeTextEditor = makeEditor('/ws/project/a.js', makeSelection(1, 0, 3, 2));
       await run(id);
-      assert.deepEqual(state.executed, [CMD]);
+      assert.deepEqual(state.executed, [FOCUS, CMD]);
       assert.equal(state.clipboard, '');
       assert.deepEqual(state.warnings, []);
     });
@@ -93,9 +93,48 @@ describe('エディタからの送信（sendSelection / sendCurrentFile）', () 
     const { vscode, state, run } = setup({ onExecute: () => { throw new Error('command not found'); } });
     vscode.window.activeTextEditor = makeEditor('/ws/project/src/app.ts', makeSelection(0, 0, 0, 3));
     await assert.doesNotReject(run('rightClickMention.sendSelection'));
-    assert.deepEqual(state.executed, [CMD]);
+    assert.deepEqual(state.executed, [FOCUS, CMD]);
     assert.equal(state.clipboard, '@src/app.ts#1');
     assert.ok(state.warnings[0].includes(R.failed));
+  });
+
+  it('入れる前にチャットを開き、元のエディタを前面に戻す', async () => {
+    const { vscode, state, run } = setup();
+    vscode.window.activeTextEditor = makeEditor('/ws/project/a.js', makeSelection(1, 0, 3, 2));
+    await run('rightClickMention.sendSelection');
+    assert.deepEqual(state.executed, [FOCUS, CMD]);
+    assert.deepEqual(
+      state.shown.map((s) => s.fsPath),
+      ['/ws/project/a.js'],
+    );
+  });
+
+  it('チャットをエディタのタブで開いていても、選択範囲を保ったまま元のエディタで入れる', async () => {
+    const seen: { path?: string; line?: number; empty?: boolean }[] = [];
+    const ctx: { vscode?: ReturnType<typeof setup>['vscode'] } = {};
+    const { vscode, run } = setup({
+      chatInEditorTab: true,
+      onExecute: (id) => {
+        const ed = ctx.vscode?.window.activeTextEditor;
+        if (id === CMD) seen.push({ path: ed?.document.uri.fsPath, line: ed?.selection.start.line, empty: ed?.selection.isEmpty });
+      },
+    });
+    ctx.vscode = vscode;
+    vscode.window.activeTextEditor = makeEditor('/ws/project/a.js', makeSelection(4, 0, 9, 1));
+    await run('rightClickMention.sendSelection');
+    assert.deepEqual(seen, [{ path: '/ws/project/a.js', line: 4, empty: false }]);
+  });
+
+  it('チャットを開くのに失敗しても、公式コマンドで入れることは試す', async () => {
+    const { vscode, state, run } = setup({
+      onExecute: (id) => {
+        if (id === FOCUS) throw new Error('no chat');
+      },
+    });
+    vscode.window.activeTextEditor = makeEditor('/ws/project/a.js');
+    await run('rightClickMention.sendCurrentFile');
+    assert.deepEqual(state.executed, [FOCUS, CMD]);
+    assert.deepEqual(state.warnings, []);
   });
 
   it('マルチルートのフォールバックはフォルダ名付き', async () => {
@@ -122,11 +161,11 @@ describe('エクスプローラーからの送信（sendFile）', () => {
     ctx.vscode = vscode;
     await run('rightClickMention.sendFile', A, undefined);
     assert.deepEqual(state.opened, ['/ws/project/a.js']);
-    assert.equal(state.shown.length, 1);
+    assert.equal(state.shown.length, 2); // 開く + チャットを開いたあとで前面に戻す
     const o = state.shown[0].options;
     assert.equal(o.preview, false); // プレビューで開くと、ユーザーのプレビューのタブを消してしまう
     assert.equal(o.preserveFocus, false);
-    assert.deepEqual(state.executed, [CMD]);
+    assert.deepEqual(state.executed, [FOCUS, CMD]);
     assert.deepEqual(emptyAtInsert, [true]);
   });
 
@@ -134,7 +173,7 @@ describe('エクスプローラーからの送信（sendFile）', () => {
     const { state, run } = setup();
     await run('rightClickMention.sendFile', B, [A, B]);
     assert.deepEqual(state.opened, ['/ws/project/a.js', '/ws/project/b.js']);
-    assert.deepEqual(state.executed, [CMD, CMD]);
+    assert.deepEqual(state.executed, [FOCUS, CMD, FOCUS, CMD]);
   });
 
   it('選択配列が空なら右クリックしたファイルを使う', async () => {
@@ -168,7 +207,7 @@ describe('エクスプローラーからの送信（sendFile）', () => {
   it('開けないファイルが混ざっても残りは送り、開けないものは最後に貼り付ける', async () => {
     const { state, run } = setup({ isBinary: (p) => p.endsWith('.png') });
     await run('rightClickMention.sendFile', A, [A, IMG, B]);
-    assert.deepEqual(state.executed, [CMD, CMD, FOCUS, PASTE]);
+    assert.deepEqual(state.executed, [FOCUS, CMD, FOCUS, CMD, FOCUS, PASTE]);
     assert.deepEqual(state.clipboardWrites, ['@logo.png']);
   });
 
@@ -249,7 +288,7 @@ describe('エクスプローラーからの送信（sendFile）', () => {
     const { state, run } = setup({ statFails: (p) => p === '/ws/project/a.js' });
     await run('rightClickMention.sendFile', A);
     assert.deepEqual(state.opened, ['/ws/project/a.js']);
-    assert.deepEqual(state.executed, [CMD]);
+    assert.deepEqual(state.executed, [FOCUS, CMD]);
   });
 
   it('エディタで表示できないファイルがあっても止まらず、残りと後回しの分を届ける', async () => {
@@ -259,7 +298,7 @@ describe('エクスプローラーからの送信（sendFile）', () => {
       showFails: (p) => p === '/ws/project/a.js',
     });
     await assert.doesNotReject(run('rightClickMention.sendFile', A, [SRC, A, B]));
-    assert.deepEqual(state.executed, [CMD, FOCUS, PASTE]); // B は送り、src と a.js は貼り付け
+    assert.deepEqual(state.executed, [FOCUS, CMD, FOCUS, PASTE]); // B は送り、src と a.js は貼り付け
     assert.deepEqual(state.clipboardWrites, ['@src/ @a.js']);
   });
 
@@ -281,7 +320,7 @@ describe('エクスプローラーからの送信（sendFile）', () => {
     const { state, run } = setup({ isFolder: (p) => p === '/ws/project/src' || p === '/ws/project/docs' });
     await run('rightClickMention.sendFile', A, [SRC, A, DOCS]);
     assert.deepEqual(state.opened, ['/ws/project/a.js']);
-    assert.deepEqual(state.executed, [CMD, FOCUS, PASTE]);
+    assert.deepEqual(state.executed, [FOCUS, CMD, FOCUS, PASTE]);
     assert.deepEqual(state.clipboardWrites, ['@src/ @docs/']);
     assert.equal(state.infos.length, 1);
   });
@@ -332,7 +371,7 @@ describe('エクスプローラーから送るときに開いたタブ', () => {
   it('参照を作るために開いたタブは、チャットに入れたあとで閉じる', async () => {
     const { state, run } = setup();
     await run('rightClickMention.sendFile', A);
-    assert.deepEqual(state.executed, [CMD]);
+    assert.deepEqual(state.executed, [FOCUS, CMD]);
     assert.deepEqual(state.closed, ['/ws/project/a.js']);
     assert.deepEqual(state.tabs, []);
   });
@@ -354,7 +393,7 @@ describe('エクスプローラーから送るときに開いたタブ', () => {
   it('もともと開いていたファイルのタブは閉じない', async () => {
     const { state, run } = setup({ openTabs: ['/ws/project/a.js'] });
     await run('rightClickMention.sendFile', A, [A, B]);
-    assert.deepEqual(state.executed, [CMD, CMD]);
+    assert.deepEqual(state.executed, [FOCUS, CMD, FOCUS, CMD]);
     assert.deepEqual(state.closed, ['/ws/project/b.js']);
     assert.deepEqual(tabPaths(state.tabs), ['/ws/project/a.js']);
   });
@@ -369,7 +408,7 @@ describe('エクスプローラーから送るときに開いたタブ', () => {
   it('タブを閉じられなくても、残りのファイルは送る（タブは残り、通知もコピーもしない）', async () => {
     const { state, run } = setup({ closeFails: true });
     await assert.doesNotReject(run('rightClickMention.sendFile', A, [A, B]));
-    assert.deepEqual(state.executed, [CMD, CMD]);
+    assert.deepEqual(state.executed, [FOCUS, CMD, FOCUS, CMD]);
     assert.deepEqual(state.closed, []);
     assert.deepEqual(tabPaths(state.tabs), ['/ws/project/a.js', '/ws/project/b.js']);
     assert.deepEqual(state.warnings, []);
@@ -398,6 +437,21 @@ describe('エクスプローラーから送るときに開いたタブ', () => {
     await run('rightClickMention.sendFile', uri('/ws/project/app.ts'));
     assert.deepEqual(state.closed, []);
     assert.deepEqual(tabPaths(state.tabs), ['/ws/project/App.ts']);
+  });
+
+  it('チャットをエディタのタブで開いていても、開いたファイルで入れて、そのタブは閉じる', async () => {
+    const seen: (string | undefined)[] = [];
+    const ctx: { vscode?: ReturnType<typeof setup>['vscode'] } = {};
+    const { vscode, state, run } = setup({
+      chatInEditorTab: true,
+      onExecute: (id) => {
+        if (id === CMD) seen.push(ctx.vscode?.window.activeTextEditor?.document.uri.fsPath);
+      },
+    });
+    ctx.vscode = vscode;
+    await run('rightClickMention.sendFile', A, [A, B]);
+    assert.deepEqual(seen, ['/ws/project/a.js', '/ws/project/b.js']);
+    assert.deepEqual(state.tabs, []);
   });
 
   it('もともと開いていたファイルは、送ったあとで選択（カーソル位置）を元に戻す', async () => {

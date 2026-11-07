@@ -25,7 +25,7 @@ flowchart LR
     subgraph Ext["この拡張（src/）"]
       SAE["commands.ts<br/>addActiveEditorToChat()"]
       SF["commands.ts<br/>addExplorerItemsToChat()"]
-      STC["claudeChat.ts<br/>insertActiveEditorMention()"]
+      STC["claudeChat.ts<br/>insertMentionFor(editor)"]
       PST["fallback.ts → claudeChat.ts<br/>deliverDeferredReferences()<br/>（貼り付け）"]
       FB["fallback.ts<br/>deliverDeferredReferences()<br/>（コピー + 警告）"]
     end
@@ -80,6 +80,7 @@ flowchart LR
 | `.vscode/extensions.json` | このフォルダを開くと、Oxlint 拡張（`oxc.oxc-vscode`）を入れるよう案内する |
 | `README.md` | 使い方（GitHub のトップに表示される） |
 | `docs/ARCHITECTURE.md` | このファイル |
+| `docs/MANUAL_TEST.md` | 手動テストの手順（チャットに本当に入るか、Remote で動くか） |
 | `LICENSE` | MIT ライセンス |
 | `.vscodeignore` | VSIX に入れないファイルの指定（`src/`・`docs/`・`out/test/` など。VSIX に入るのは `out/*.js`・`package.json`・README・CHANGELOG・LICENSE） |
 | `.gitignore` | git に入れないファイルの指定（`node_modules/`・`out/`・`*.vsix` など） |
@@ -149,7 +150,7 @@ flowchart TD
 |---|---|
 | `extension.ts` | `activate(context)`: 3 つのコマンドを登録（`sendSelection` と `sendCurrentFile` は同じ処理）。`deactivate()` |
 | `commands.ts` | `addActiveEditorToChat()`: エディタの右クリック。公式コマンドで入れ、入れられなければ `deliverDeferredReferences` に渡す<br/>`addExplorerItemsToChat(clicked, selected)`: エクスプローラーの右クリック。ファイルは `openForMention` で開いて公式コマンドで入れ、`finish()` で選択を戻すか、この拡張が開いたタブを閉じる。入れられなかったもの（フォルダ・開けないファイル・失敗）は `{ ref, reason }` として後回しにし、最後にまとめて `deliverDeferredReferences` に渡す |
-| `claudeChat.ts` | `isClaudeInstalled()`<br/>`insertActiveEditorMention()`: 公式コマンドを呼ぶ。入れられなかった理由（`notInstalled` / `failed`）を返す<br/>`pasteClipboardIntoChat()`: `claude-vscode.focus` → 少し待つ → 標準の貼り付け |
+| `claudeChat.ts` | `isClaudeInstalled()`<br/>`insertMentionFor(editor)`: 先にチャットを開き（`claude-vscode.focus`）、元のエディタを前面に戻してから、公式コマンドを呼ぶ。入れられなかった理由（`notInstalled` / `failed`）を返す<br/>`pasteClipboardIntoChat()`: `claude-vscode.focus` → 少し待つ → 標準の貼り付け |
 | `fallback.ts` | `FallbackReason`（理由の種類）と表示文、`DeferredReference`（`{ ref, reason }`）<br/>`deliverDeferredReferences(deferred)`: 貼り付けるかコピーするかをここだけで決める。公式拡張があり、理由がフォルダ・開けないファイルだけなら貼り付け（通知 1 回）。それ以外はコピー（警告 1 回）。参照に制御文字（改行など）が入っていれば、貼り付けずにコピーする。公式拡張がなければ、その理由も警告に足す |
 | `workspace.ts` | `workspacePath(uri)`: 公式と同じ形式のパス<br/>`isFolder(uri)`: `workspace.fs.stat` で判定（シンボリックリンクのフォルダも含む。調べられなければファイル扱い）<br/>`openForMention(uri)`: `openTextDocument` で開き、アクティブなエディタグループにそのドキュメントのタブがあるかを（ドキュメント自身の URI で）調べてから表示する（プレビューにしない）。公式コマンドを呼ぶ直前に、選択を今のカーソル位置の空の選択にする。`{ editor, finish() }` を返し、開けない・表示できなければ `undefined`<br/>`finish()`: タブを残すときは元の選択を戻し、この拡張が開いたタブなら閉じる（`tabGroups` を使う） |
 | `reference.ts` | `fileReference(path, selection?)`: `@path` / `@path#8` / `@path#5-10`<br/>`folderReference(path)`: `@path/`<br/>`joinReferences(refs)`: 空白でつなぐ |
@@ -161,7 +162,7 @@ flowchart TD
 | 動詞 | 意味 | 例 |
 | --- | --- | --- |
 | add | この拡張のコマンド（ユーザーから見た「チャットに追加」） | `addExplorerItemsToChat` |
-| insert | 公式コマンドでチャットに入れる | `insertActiveEditorMention` |
+| insert | 公式コマンドでチャットに入れる | `insertMentionFor` |
 | paste | クリップボードからチャットに貼り付ける | `pasteClipboardIntoChat` |
 | deliver | 後回しにした参照を、貼り付けかコピーで届ける | `deliverDeferredReferences` |
 
@@ -196,6 +197,8 @@ sequenceDiagram
   VS->>E: rightClickMention.sendSelection
   E->>E: activeTextEditor を取得
   E->>E: 公式拡張がインストール済みか確認
+  E->>C: claude-vscode.focus（先にチャットを開く）
+  E->>VS: showTextDocument（元のエディタを前面に戻す・選択はそのまま）
   E->>C: executeCommand('claude-vscode.insertAtMention')
   C->>C: activeTextEditor の選択から @path#5-10 を作る
   C->>W: 表示中のチャット全部に挿入（なければ開いて挿入）
@@ -220,7 +223,7 @@ sequenceDiagram
       E->>VS: openTextDocument → アクティブなグループのタブを調べる → showTextDocument
       alt テキストとして開けた
         E->>VS: 選択を今のカーソル位置の空の選択にする
-        E->>C: insertActiveEditorMention → 公式コマンド
+        E->>C: insertMentionFor → チャットを開く → 前面に戻す → 公式コマンド
         C-->>U: @path がチャットに入る
         Note over E,C: 公式拡張がない・失敗したら @path を後回しリストに追加
         E->>VS: finish()（元の選択を戻す / この拡張が開いたタブを閉じる）
@@ -253,7 +256,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-  S([insertActiveEditorMention]) --> Q1{公式拡張<br/>anthropic.claude-code<br/>がある？}
+  S([insertMentionFor]) --> Q1{公式拡張<br/>anthropic.claude-code<br/>がある？}
   Q1 -- いいえ --> F[理由を返す → deliverDeferredReferences<br/>参照をクリップボードへ]
   Q1 -- はい --> P[claude-vscode.insertAtMention]
   P --> Q3{例外が出た？}
@@ -286,6 +289,7 @@ flowchart TD
 - **公式コマンドに委ねる**: 参照の形式やチャットへの挿入方法を公式と完全に一致させられ、コードも短い。
 - **公式拡張のコマンドに依存する**: 公式拡張の更新でコマンド名が変わると動かなくなる。その場合は `src/constants.ts` の `CLAUDE` を書き換える（キーボードショートカット画面で「Insert @-Mention」を検索 → 右クリック →「コマンドIDをコピー」）。
 - **失敗しても無駄にしない**: チャットに追加できないときはクリップボードにコピーし、手で貼れるようにしている。
+- **先にチャットを開く**: チャットが閉じていたり起動しきっていなかったりすると、公式コマンドは起動を 15 秒待って、参照を入れずに諦める（失敗も返さない）。そこで、公式コマンドの前に `claude-vscode.focus` でチャットを開いて起動させる。チャットをエディタのタブで開いていると、フォーカスが移って「アクティブなエディタ」がなくなるので、元のエディタを `showTextDocument` で前面に戻してから公式コマンドを呼ぶ（選択範囲はそのまま残る）。チャットが開いているかを調べる API はない（サイドバーのチャットはタブの一覧に出ない）ので、毎回開く。
 - **フォルダは貼り付けで入れる**: 公式コマンドはファイルしか扱えないため、公開されている `claude-vscode.focus` と VS Code 標準の貼り付けを組み合わせる。公式拡張の中身は使わない。欠点は、クリップボードの中身を上書きすることと、本当に入ったかを確かめられないこと（通知に「入っていなければ Ctrl+V」と書いている）。フォーカスが移るまでの待ち時間は `FOCUS_WAIT_MS`（800ms）。短いと、移りきる前の場所（エディタなど）に貼り付けてしまうので、待たされても気にならない 1 秒未満でなるべく長くしている（最初は 150ms だった）。テストでは 0 に書き換えて待たない。
 - **制御文字を含む参照は貼り付けない**: ファイル名に改行などの制御文字が入っていると、参照は自動で貼り付けず、クリップボードにコピーして警告を出すだけにする。フォーカスがチャットに移らなかったとき、貼り付けがエディタやターミナルに入ってしまうおそれがあり、改行がターミナルに入るとコマンドとして動きかねないため。
 
@@ -324,7 +328,7 @@ npm run package   # = vsce package。直前に vscode:prepublish でコンパイ
 # 更新するときは package.json の version を上げてから再パッケージ → VSIX から再インストール
 ```
 
-配布用の VSIX は GitHub Actions（`.github/workflows/release.yml`）が作る。`v*` のタグを push すると、`package` ジョブ（読み取り権限のみ）がリンター・テスト・VSIX 作成を行い、`release` ジョブ（書き込み権限あり・依存は入れない）が Releases に添付する。リリースの説明文は `CHANGELOG.md` の該当バージョンの項目から作る（項目がないときや、中身が空白だけのときは失敗する）。手動実行では Releases は作らず、VSIX を Actions の成果物に置くだけ。手順は README の「リリースの手順」を参照。
+配布用の VSIX は GitHub Actions（`.github/workflows/release.yml`）が作る。`v*` のタグを push すると、`package` ジョブ（読み取り権限のみ）がリンター・テスト・VSIX 作成を行い、`release` ジョブ（書き込み権限あり・依存は入れない）が Releases に添付する。リリースの説明文は `CHANGELOG.md` の該当バージョンの項目から作る（項目がないときや、中身が空白だけのときは失敗する）。手動実行では Releases は作らず、VSIX を Actions の成果物に置くだけ。手順は README の「リリースの手順」を参照。リリースの前に、[手動テストの手順](MANUAL_TEST.md) で、チャットに本当に入るかを確かめる。
 
 PR と main への push では `.github/workflows/ci.yml` が `npm ci`・リンター（Oxlint）・ユニットテスト・VSIX 作成を確かめる。Dependabot の PR もここで確かめられるので、壊れる更新は取り込む前に気づける（TypeScript 7 への更新で `npm ci` が失敗したことがきっかけ）。
 
@@ -383,7 +387,7 @@ flowchart LR
 | `src/test/helpers/vscodeMock.ts` | VS Code API のモック。`asRelativePath` のマルチルート挙動、`Selection` の正規化、バイナリで開けないファイルなどを再現。`setup()` でモック＋拡張＋activate を一度に用意（`out/` のファイルは毎回読み込み直す） | — |
 | `src/test/unit/reference.test.ts` | 行番号（1 行・複数行・次行先頭で終わる・逆方向選択）、フォルダの `/`、空白でつなぐ。`reference.ts` をモックなしで直接 import する | 12 |
 | `src/test/unit/workspacePath.test.ts` | パス形式（単一・マルチルート・別の場所・入れ子・ワークスペース外）。コマンドを実行し、コピーされた参照で確かめる | 6 |
-| `src/test/unit/commands.test.ts` | コマンド登録と dispose、`extension.ts` が activate / deactivate だけを出すこと、送信の分岐（成功・拡張なし・例外・reject）、エクスプローラー（単一・複数・空・引数なし・バイナリ混在・フォルダの貼り付け・貼り付け失敗・拡張なし・ファイルとフォルダの混在・コピーと警告を 1 回にまとめる・同じ理由を 1 回だけ書く）、失敗の経路（フォーカス後の貼り付け失敗・フォルダか調べられない・エディタで表示できない・シンボリックリンクのフォルダ）、開いたタブを閉じる（入れたあとで閉じる・もともと開いていたものは残す・コピーに回っても閉じる・閉じられなくても続ける・フォーカスを保つ・別のグループにだけあったもの・パスの大文字小文字の違い・選択とカーソルを戻す・フォルダなどは触らない・エディタの右クリックでは閉じない）、改行を含む参照は貼り付けない、貼り付け前の待ち時間が 1 秒未満 | 46 |
+| `src/test/unit/commands.test.ts` | コマンド登録と dispose、`extension.ts` が activate / deactivate だけを出すこと、送信の分岐（成功・拡張なし・例外・reject）、エクスプローラー（単一・複数・空・引数なし・バイナリ混在・フォルダの貼り付け・貼り付け失敗・拡張なし・ファイルとフォルダの混在・コピーと警告を 1 回にまとめる・同じ理由を 1 回だけ書く）、失敗の経路（フォーカス後の貼り付け失敗・フォルダか調べられない・エディタで表示できない・シンボリックリンクのフォルダ）、開いたタブを閉じる（入れたあとで閉じる・もともと開いていたものは残す・コピーに回っても閉じる・閉じられなくても続ける・フォーカスを保つ・別のグループにだけあったもの・パスの大文字小文字の違い・選択とカーソルを戻す・フォルダなどは触らない・エディタの右クリックでは閉じない）、改行を含む参照は貼り付けない、貼り付け前の待ち時間が 1 秒未満、チャットを先に開いて元のエディタを前面に戻す（チャットがエディタのタブにある場合も） | 50 |
 | `src/test/unit/manifest.test.ts` | package.json の基本項目と category、宣言とコード（`COMMANDS`）の一致、メニューの `when` 条件、制限モードの宣言、Remote の宣言（extensionKind）、公式拡張にコマンドが存在するか | 18 |
 | `src/test/integration/runTest.ts` | `@vscode/test-electron` でテスト用 VS Code を起動（他の拡張は無効） | — |
 | `src/test/integration/suite/extension.itest.ts` | 実 VS Code 上でマルチルートのパス、選択の扱い、エクスプローラー送信、開いたタブを閉じる・もともと開いていたタブを残す・選択範囲を元に戻す・プレビューのタブを消さない、バイナリファイル、フォルダの判定、ファイルとフォルダの混在 | 19 |

@@ -1,7 +1,7 @@
 // 右クリックメニューから呼ばれる、2 つのコマンドの処理
 
 import * as vscode from 'vscode';
-import { insertActiveEditorMention } from './claudeChat';
+import { insertMentionFor } from './claudeChat';
 import { type DeferredReference, deliverDeferredReferences } from './fallback';
 import { MESSAGES } from './messages';
 import { fileReference, folderReference } from './reference';
@@ -15,7 +15,7 @@ export async function addActiveEditorToChat(): Promise<void> {
     return;
   }
 
-  const failure = await insertActiveEditorMention();
+  const failure = await insertMentionFor(editor);
   if (failure) {
     const ref = fileReference(workspacePath(editor.document.uri), editor.selection);
     await deliverDeferredReferences([{ ref, reason: failure }]);
@@ -48,7 +48,7 @@ export async function addExplorerItemsToChat(
       continue;
     }
 
-    const failure = await insertActiveEditorMention();
+    const failure = await insertMentionFor(opened.editor);
     if (failure) deferred.push({ ref: fileReference(workspacePath(uri)), reason: failure });
 
     // 参照を作るためだけに開いたタブは閉じ、もともと開いていたものは選択を戻す

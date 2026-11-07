@@ -11,17 +11,40 @@ export function isClaudeInstalled(): boolean {
 }
 
 /**
- * アクティブなエディタの参照をチャットに入れる
+ * エディタの参照（選択範囲があれば行番号付き）をチャットに入れる
  * 入れられたら undefined、だめなら理由
  */
-export async function insertActiveEditorMention(): Promise<InsertFailure | undefined> {
+export async function insertMentionFor(editor: vscode.TextEditor): Promise<InsertFailure | undefined> {
   if (!isClaudeInstalled()) return 'notInstalled';
+  // チャットが閉じていると、公式コマンドは起動を 15 秒待って、入れずに諦めることがある
+  // 先にチャットを開いて起動させておく
+  await openChat();
+  // チャットにフォーカスが移ると、公式コマンドが参照を作る「アクティブなエディタ」がなくなることがある
+  // 元のエディタを前面に戻す（選択範囲はそのまま残る）
+  await bringToFront(editor);
   try {
     await vscode.commands.executeCommand(CLAUDE.insertMentionCommand);
     return undefined;
   } catch (err) {
     console.error(LOG_PREFIX, err);
     return 'failed';
+  }
+}
+
+async function openChat(): Promise<void> {
+  try {
+    await vscode.commands.executeCommand(CLAUDE.focusInputCommand);
+  } catch (err) {
+    // 開けなくても、公式コマンドで入れることは試す
+    console.error(LOG_PREFIX, err);
+  }
+}
+
+async function bringToFront(editor: vscode.TextEditor): Promise<void> {
+  try {
+    await vscode.window.showTextDocument(editor.document, { viewColumn: editor.viewColumn, preserveFocus: false });
+  } catch (err) {
+    console.error(LOG_PREFIX, err);
   }
 }
 
