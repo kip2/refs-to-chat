@@ -114,6 +114,8 @@ export interface MockOptions {
   closeFails?: boolean;
   /** チャットをエディタのタブで開いている（Focus input でアクティブなエディタがなくなる） */
   chatInEditorTab?: boolean;
+  /** 設定（例: `{ 'rightClickMention.explorerFiles': 'open' }`） */
+  settings?: Record<string, unknown>;
 }
 
 /** VS Code の TabInputText（テキストエディタのタブ） */
@@ -192,6 +194,15 @@ export function createVscodeMock(opts: MockOptions = {}) {
     TabInputText,
     workspace: {
       workspaceFolders: folders,
+      // 本物と同じく、設定されていなければ初期値を返す
+      getConfiguration(section: string) {
+        return {
+          get<T>(key: string, defaultValue: T): T {
+            const value = opts.settings?.[`${section}.${key}`];
+            return value === undefined ? defaultValue : (value as T);
+          },
+        };
+      },
       fs: {
         async stat(u: MockUri) {
           if (is(opts.statFails, u.fsPath)) throw new Error('EntryNotFound (FileSystemError)');

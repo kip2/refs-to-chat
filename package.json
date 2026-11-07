@@ -56,6 +56,24 @@
     "typescript": "^7.0.2"
   },
   "contributes": {
+    "configuration": {
+      "title": "Right Click Mention",
+      "properties": {
+        "rightClickMention.explorerFiles": {
+          "type": "string",
+          "enum": [
+            "paste",
+            "open"
+          ],
+          "enumDescriptions": [
+            "ファイルを開かずに、参照をチャットの入力欄に貼り付ける（タブがちらつかない。クリップボードは上書きされる）",
+            "ファイルを一瞬開いて、公式拡張のコマンドで入れる（確実。入れたあと、開いたタブは閉じる）"
+          ],
+          "default": "paste",
+          "markdownDescription": "エクスプローラーから「Claudeのチャットに追加」したときの、ファイルの入れ方です。フォルダはどちらでも貼り付けで入れます。エディタの右クリックには関係ありません。"
+        }
+      }
+    },
     "commands": [
       {
         "command": "rightClickMention.sendSelection",

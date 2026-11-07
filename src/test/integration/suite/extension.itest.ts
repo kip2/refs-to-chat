@@ -25,6 +25,13 @@ async function openWithSelection(uri: vscode.Uri, sl: number, sc: number, el: nu
 
 const clipboard = () => vscode.env.clipboard.readText();
 
+/** エクスプローラーのファイルの入れ方を設定する（undefined で初期設定に戻す） */
+async function setExplorerFiles(value: 'paste' | 'open' | undefined): Promise<void> {
+  await vscode.workspace
+    .getConfiguration('rightClickMention')
+    .update('explorerFiles', value, vscode.ConfigurationTarget.Global);
+}
+
 /** そのファイルのタブがどこかに開いているか */
 function hasTab(uri: vscode.Uri): boolean {
   return vscode.window.tabGroups.all
@@ -102,7 +109,14 @@ describe('Right Click Mention（実VS Code・マルチルート）', function ()
     });
   });
 
-  describe('エクスプローラーからの送信', function () {
+  describe('エクスプローラーからの送信（ファイルを開く設定: open）', function () {
+    before(async function () {
+      await setExplorerFiles('open');
+    });
+    after(async function () {
+      await setExplorerFiles(undefined);
+    });
+
     it('1ファイル → 開いて選択なしで送り、開いたタブは閉じる', async function () {
       const uri = fileIn('beta', 'src/only-in-beta.js');
       await vscode.commands.executeCommand('rightClickMention.sendFile', uri, [uri]);
@@ -173,6 +187,27 @@ describe('Right Click Mention（実VS Code・マルチルート）', function ()
       const a = fileIn('alpha', 'src/app.js');
       await vscode.commands.executeCommand('rightClickMention.sendFile', dir, [dir, a]);
       assert.strictEqual(await clipboard(), '@beta/src/ @alpha/src/app.js');
+    });
+  });
+
+  describe('エクスプローラーからの送信（初期設定: 貼り付け）', function () {
+    // 公式拡張を無効にしているので、貼り付けまではいかず、クリップボードへのコピーになる
+    it('ファイルを開かずに参照を作る（タブは開かない）', async function () {
+      const uri = fileIn('alpha', 'src/app.js');
+      await vscode.commands.executeCommand('rightClickMention.sendFile', uri, [uri]);
+      assert.strictEqual(await clipboard(), '@alpha/src/app.js');
+      assert.strictEqual(hasTab(uri), false);
+      assert.strictEqual(vscode.window.activeTextEditor, undefined);
+    });
+
+    it('ファイルとフォルダを混ぜても、選んだ順にまとめて 1 回でコピーする', async function () {
+      const a = fileIn('alpha', 'src/app.js');
+      const dir = fileIn('beta', 'src');
+      const b = fileIn('beta', 'src/only-in-beta.js');
+      await vscode.commands.executeCommand('rightClickMention.sendFile', a, [a, dir, b]);
+      assert.strictEqual(await clipboard(), '@alpha/src/app.js @beta/src/ @beta/src/only-in-beta.js');
+      assert.strictEqual(hasTab(a), false);
+      assert.strictEqual(hasTab(b), false);
     });
   });
 });

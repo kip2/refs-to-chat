@@ -7,6 +7,7 @@ export const REASON_MESSAGES = {
   failed: 'Claudeのチャットに追加できませんでした',
   notText: 'テキストとして開けないファイルがあります',
   folder: 'フォルダはチャットに直接入れられません',
+  pasteFile: 'チャットに貼り付けられませんでした',
 } as const;
 
 export const MESSAGES = {

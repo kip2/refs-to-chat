@@ -6,7 +6,8 @@ import { type InsertFailure, isClaudeInstalled, pasteClipboardIntoChat } from '.
 import { MESSAGES, REASON_MESSAGES } from './messages';
 import { joinReferences } from './reference';
 
-export type FallbackReason = InsertFailure | 'notText' | 'folder';
+/** 公式コマンドで入れない理由（pasteFile は、設定でファイルも貼り付けで入れるとき） */
+export type FallbackReason = InsertFailure | 'notText' | 'folder' | 'pasteFile';
 
 /** 後回しにした参照と、公式コマンドで入れられなかった理由 */
 export interface DeferredReference {
@@ -16,7 +17,7 @@ export interface DeferredReference {
 
 /**
  * 後回しにした参照をチャットに届ける
- * - フォルダ・開けないファイルだけ（公式拡張あり）: 貼り付けで入れる
+ * - フォルダ・開けないファイル・貼り付けの設定のファイルだけ（公式拡張あり）: 貼り付けで入れる
  * - それ以外、または貼り付けを呼べないとき: コピーして警告を出す
  */
 export async function deliverDeferredReferences(deferred: readonly DeferredReference[]): Promise<void> {
@@ -34,9 +35,9 @@ export async function deliverDeferredReferences(deferred: readonly DeferredRefer
   await copyWithWarning(refs, reasons);
 }
 
-/** 公式拡張は動いていて、種類が合わないだけのとき */
+/** 公式拡張は動いていて、公式コマンドを使わないだけのとき */
 function canPaste(reason: FallbackReason): boolean {
-  return reason === 'folder' || reason === 'notText';
+  return reason === 'folder' || reason === 'notText' || reason === 'pasteFile';
 }
 
 // フォーカスがチャットに移らないと、貼り付けはエディタやターミナルに入る

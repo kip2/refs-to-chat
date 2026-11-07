@@ -2,6 +2,7 @@
 
 import * as vscode from 'vscode';
 import { insertMentionFor } from './claudeChat';
+import { explorerFileMode } from './config';
 import { type DeferredReference, deliverDeferredReferences } from './fallback';
 import { MESSAGES } from './messages';
 import { fileReference, folderReference } from './reference';
@@ -32,13 +33,20 @@ export async function addExplorerItemsToChat(
   selected?: readonly (vscode.Uri | undefined)[],
 ): Promise<void> {
   const uris = (selected?.length ? selected : [clicked]).filter((u): u is vscode.Uri => u != null);
+  const mode = explorerFileMode();
 
-  // ファイルはその場で公式コマンドで入れ、入れられないものは最後にまとめて届ける
+  // 公式コマンドで入れないものは、最後にまとめて貼り付けかコピーで届ける
   const deferred: DeferredReference[] = [];
 
   for (const uri of uris) {
     if (await isFolder(uri)) {
       deferred.push({ ref: folderReference(workspacePath(uri)), reason: 'folder' });
+      continue;
+    }
+
+    // 貼り付けの設定なら、ファイルも開かずにフォルダと同じく貼り付けで入れる
+    if (mode === 'paste') {
+      deferred.push({ ref: fileReference(workspacePath(uri)), reason: 'pasteFile' });
       continue;
     }
 

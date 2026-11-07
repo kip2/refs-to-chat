@@ -5,7 +5,7 @@ import * as assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import * as os from 'os';
 import * as path from 'path';
-import { CLAUDE, COMMANDS } from '../../constants';
+import { CLAUDE, COMMANDS, SETTINGS } from '../../constants';
 import { setup } from '../helpers/vscodeMock';
 
 interface MenuItem {
@@ -26,6 +26,10 @@ interface Manifest {
   contributes: {
     commands: { command: string; title: string; category?: string }[];
     menus: Record<string, MenuItem[]>;
+    configuration?: {
+      title: string;
+      properties: Record<string, { type: string; enum?: string[]; enumDescriptions?: string[]; default?: unknown }>;
+    };
   };
 }
 
@@ -111,7 +115,6 @@ describe('メニューの表示条件', () => {
   it('Remote（WSL・SSH など）では、リモート側でも手元の PC 側でも動ける', () => {
     assert.deepEqual(pkg.extensionKind, ['workspace', 'ui']);
   });
-
   it('右クリックメニューはすべてターミナル版の設定では出さない', () => {
     for (const m of [...editor, ...explorer]) assert.ok(m.when?.includes(TERMINAL_GUARD), m.command);
   });
@@ -128,6 +131,25 @@ describe('メニューの表示条件', () => {
 
   it('右クリックメニューは navigation グループ', () => {
     for (const m of [...editor, ...explorer]) assert.match(m.group ?? '', /^navigation/);
+  });
+});
+
+describe('設定の宣言', () => {
+  const key = `${SETTINGS.section}.${SETTINGS.explorerFiles}`;
+  const prop = pkg.contributes.configuration?.properties[key];
+
+  it('エクスプローラーのファイルの入れ方を、package.json と constants.ts で同じ名前にしている', () => {
+    assert.ok(prop, `${key} が package.json に無い`);
+  });
+
+  it('選べるのは paste と open で、初期設定は paste', () => {
+    assert.deepEqual(prop?.enum, ['paste', 'open']);
+    assert.equal(prop?.default, 'paste');
+    assert.equal(prop?.enumDescriptions?.length, 2);
+  });
+
+  it('設定画面の見出しは拡張の名前', () => {
+    assert.equal(pkg.contributes.configuration?.title, pkg.displayName);
   });
 });
 

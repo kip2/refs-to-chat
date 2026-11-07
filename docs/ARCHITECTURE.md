@@ -132,6 +132,8 @@ flowchart TB
 flowchart TD
   EXT["extension.ts<br/>コマンドの登録"] --> CMD["commands.ts<br/>2 つのコマンドの処理"]
   EXT --> CONST["constants.ts<br/>定数"]
+  CMD --> CFG["config.ts<br/>設定を読む"]
+  CFG --> CONST
   CMD --> MSG["messages.ts<br/>画面に出す文"]
   FB --> MSG
   CMD --> CHAT["claudeChat.ts<br/>公式拡張とのやり取り"]
@@ -154,7 +156,8 @@ flowchart TD
 | `fallback.ts` | `FallbackReason`（理由の種類）と表示文、`DeferredReference`（`{ ref, reason }`）<br/>`deliverDeferredReferences(deferred)`: 貼り付けるかコピーするかをここだけで決める。公式拡張があり、理由がフォルダ・開けないファイルだけなら貼り付け（通知 1 回）。それ以外はコピー（警告 1 回）。参照に制御文字（改行など）が入っていれば、貼り付けずにコピーする。公式拡張がなければ、その理由も警告に足す |
 | `workspace.ts` | `workspacePath(uri)`: 公式と同じ形式のパス<br/>`isFolder(uri)`: `workspace.fs.stat` で判定（シンボリックリンクのフォルダも含む。調べられなければファイル扱い）<br/>`openForMention(uri)`: `openTextDocument` で開き、アクティブなエディタグループにそのドキュメントのタブがあるかを（ドキュメント自身の URI で）調べてから表示する（プレビューにしない）。公式コマンドを呼ぶ直前に、選択を今のカーソル位置の空の選択にする。`{ editor, finish() }` を返し、開けない・表示できなければ `undefined`<br/>`finish()`: タブを残すときは元の選択を戻し、この拡張が開いたタブなら閉じる（`tabGroups` を使う） |
 | `reference.ts` | `fileReference(path, selection?)`: `@path` / `@path#8` / `@path#5-10`<br/>`folderReference(path)`: `@path/`<br/>`joinReferences(refs)`: 空白でつなぐ |
-| `constants.ts` | `COMMANDS`（この拡張のコマンド ID）、`CLAUDE`（公式拡張の ID とコマンド）、`PASTE_COMMAND`、`FOCUS_WAIT_MS`、`LOG_PREFIX` |
+| `constants.ts` | `COMMANDS`（この拡張のコマンド ID）、`CLAUDE`（公式拡張の ID とコマンド）、`PASTE_COMMAND`、`FOCUS_WAIT_MS`、`LOG_PREFIX`、`SETTINGS`（設定の名前） |
+| `config.ts` | `explorerFileMode()`: 設定 `rightClickMention.explorerFiles` を読む。`paste`（初期設定。エクスプローラーのファイルも開かずに貼り付ける）か `open`（一瞬開いて公式コマンドで入れる）。知らない値は `paste` として扱う |
 | `messages.ts` | 画面に出す文。`REASON_MESSAGES`（公式コマンドで入れられなかった理由）と `MESSAGES`（開いているファイルがない、貼り付けた、コピーした）。テストも同じ定数と比べるので、文を変えてもテストを直さなくてよい |
 
 名前に使う動詞の使い分け:
@@ -175,7 +178,7 @@ flowchart TD
 - 参照の形式を変える・増やす → `reference.ts`（テストはモックなしで書ける）
 - 画面に出す文を変える → `messages.ts` だけ
 - 貼り付けるかコピーするかの条件を変える（自動の貼り付けを切る設定など） → `fallback.ts` の `deliverDeferredReferences` だけ
-- 設定を足す → `package.json` の `contributes.configuration` に宣言し、読む処理を使う側のファイルに置く
+- 設定を足す → `package.json` の `contributes.configuration` に宣言し、`constants.ts` の `SETTINGS` に名前を書き、`config.ts` に読む関数を足す。読む処理を使う側のファイルに置く
 - タブを閉じない設定 → `workspace.ts` の `openForMention` の `finish`
 - キーボードショートカット → `package.json` の `keybindings` だけ（コード変更なし）
 
@@ -387,10 +390,10 @@ flowchart LR
 | `src/test/helpers/vscodeMock.ts` | VS Code API のモック。`asRelativePath` のマルチルート挙動、`Selection` の正規化、バイナリで開けないファイルなどを再現。`setup()` でモック＋拡張＋activate を一度に用意（`out/` のファイルは毎回読み込み直す） | — |
 | `src/test/unit/reference.test.ts` | 行番号（1 行・複数行・次行先頭で終わる・逆方向選択）、フォルダの `/`、空白でつなぐ。`reference.ts` をモックなしで直接 import する | 12 |
 | `src/test/unit/workspacePath.test.ts` | パス形式（単一・マルチルート・別の場所・入れ子・ワークスペース外）。コマンドを実行し、コピーされた参照で確かめる | 6 |
-| `src/test/unit/commands.test.ts` | コマンド登録と dispose、`extension.ts` が activate / deactivate だけを出すこと、送信の分岐（成功・拡張なし・例外・reject）、エクスプローラー（単一・複数・空・引数なし・バイナリ混在・フォルダの貼り付け・貼り付け失敗・拡張なし・ファイルとフォルダの混在・コピーと警告を 1 回にまとめる・同じ理由を 1 回だけ書く）、失敗の経路（フォーカス後の貼り付け失敗・フォルダか調べられない・エディタで表示できない・シンボリックリンクのフォルダ）、開いたタブを閉じる（入れたあとで閉じる・もともと開いていたものは残す・コピーに回っても閉じる・閉じられなくても続ける・フォーカスを保つ・別のグループにだけあったもの・パスの大文字小文字の違い・選択とカーソルを戻す・フォルダなどは触らない・エディタの右クリックでは閉じない）、改行を含む参照は貼り付けない、貼り付け前の待ち時間が 1 秒未満、チャットを先に開いて元のエディタを前面に戻す（チャットがエディタのタブにある場合も） | 50 |
-| `src/test/unit/manifest.test.ts` | package.json の基本項目と category、宣言とコード（`COMMANDS`）の一致、メニューの `when` 条件、制限モードの宣言、Remote の宣言（extensionKind）、公式拡張にコマンドが存在するか | 18 |
+| `src/test/unit/commands.test.ts` | コマンド登録と dispose、`extension.ts` が activate / deactivate だけを出すこと、送信の分岐（成功・拡張なし・例外・reject）、エクスプローラー（単一・複数・空・引数なし・バイナリ混在・フォルダの貼り付け・貼り付け失敗・拡張なし・ファイルとフォルダの混在・コピーと警告を 1 回にまとめる・同じ理由を 1 回だけ書く）、失敗の経路（フォーカス後の貼り付け失敗・フォルダか調べられない・エディタで表示できない・シンボリックリンクのフォルダ）、開いたタブを閉じる（入れたあとで閉じる・もともと開いていたものは残す・コピーに回っても閉じる・閉じられなくても続ける・フォーカスを保つ・別のグループにだけあったもの・パスの大文字小文字の違い・選択とカーソルを戻す・フォルダなどは触らない・エディタの右クリックでは閉じない）、改行を含む参照は貼り付けない、貼り付け前の待ち時間が 1 秒未満、チャットを先に開いて元のエディタを前面に戻す（チャットがエディタのタブにある場合も）、設定の貼り付け（初期設定）でファイルを開かずに貼り付ける・知らない値は貼り付け扱い・貼り付けの失敗・拡張なし・改行を含む名前・エディタの右クリックには関係しない | 60 |
+| `src/test/unit/manifest.test.ts` | package.json の基本項目と category、宣言とコード（`COMMANDS`）の一致、メニューの `when` 条件、制限モードの宣言、Remote の宣言（extensionKind）、公式拡張にコマンドが存在するか、設定の宣言（名前・選べる値・初期設定・見出し） | 21 |
 | `src/test/integration/runTest.ts` | `@vscode/test-electron` でテスト用 VS Code を起動（他の拡張は無効） | — |
-| `src/test/integration/suite/extension.itest.ts` | 実 VS Code 上でマルチルートのパス、選択の扱い、エクスプローラー送信、開いたタブを閉じる・もともと開いていたタブを残す・選択範囲を元に戻す・プレビューのタブを消さない、バイナリファイル、フォルダの判定、ファイルとフォルダの混在 | 19 |
+| `src/test/integration/suite/extension.itest.ts` | 実 VS Code 上でマルチルートのパス、選択の扱い、エクスプローラー送信、開いたタブを閉じる・もともと開いていたタブを残す・選択範囲を元に戻す・プレビューのタブを消さない、バイナリファイル、フォルダの判定、ファイルとフォルダの混在、設定 open と初期設定（貼り付け）の両方 | 21 |
 | `src/test/fixtures/multi-root/` | 統合テスト用ワークスペース（同名の `app.js` を持つ alpha / beta、バイナリファイル） | — |
 
 ### 実行方法

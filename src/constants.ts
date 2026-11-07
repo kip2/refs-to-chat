@@ -36,3 +36,10 @@ export const PASTE_COMMAND = 'editor.action.clipboardPasteAction';
 export const FOCUS_WAIT_MS = 800;
 
 export const LOG_PREFIX = '[right-click-mention]';
+
+/** 設定（package.json の contributes.configuration と一致させる） */
+export const SETTINGS = {
+  section: 'rightClickMention',
+  /** エクスプローラーから送るファイルの入れ方 */
+  explorerFiles: 'explorerFiles',
+} as const;
