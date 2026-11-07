@@ -92,7 +92,11 @@ function findClaudeExtension() {
   if (process.env.CLAUDE_EXT_DIR) candidates.push(process.env.CLAUDE_EXT_DIR);
   const extRoot = path.join(os.homedir(), '.vscode', 'extensions');
   if (fs.existsSync(extRoot)) {
-    const dirs = fs.readdirSync(extRoot).filter((d) => d.startsWith('anthropic.claude-code-')).sort().reverse();
+    // バージョン番号として新しい順に並べる（文字列順だと 2.0.9 が 2.0.10 より新しく見える）
+    const dirs = fs
+      .readdirSync(extRoot)
+      .filter((d) => d.startsWith('anthropic.claude-code-'))
+      .sort((a, b) => b.localeCompare(a, 'en', { numeric: true }));
     candidates.push(...dirs.map((d) => path.join(extRoot, d)));
   }
   return candidates.find((d) => fs.existsSync(path.join(d, 'package.json')));

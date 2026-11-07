@@ -1,0 +1,7 @@
+# 改行は LF にそろえる（Windows と Linux の CI で差が出ないように）
+* text=auto eol=lf
+
+# バイナリ
+*.bin binary
+*.vsix binary
+*.png binary

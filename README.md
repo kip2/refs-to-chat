@@ -54,17 +54,18 @@ npm run package             # VSIX ファイルを作る
 
 ### リリースの手順
 
-1. `package.json` の `version` を上げてコミットする
+1. `package.json` の `version` を上げてコミットし、main に push する
 2. 同じ番号のタグを付けて push する
 
    ```bash
+   git push origin main
    git tag v0.0.2
    git push origin v0.0.2
    ```
 
 3. GitHub Actions（[.github/workflows/release.yml](.github/workflows/release.yml)）がテストをして VSIX を作り、Releases に添付する
 
-タグと `version` が違うと、Actions は失敗します。Actions の画面から手動で実行すると、Releases は作らずに、VSIX だけを Actions の成果物（Artifacts）に置きます。
+タグと `version` が違うと、Actions は失敗します。同じタグのリリースが既にあるときは、VSIX だけを差し替えます。Actions の画面からブランチを選んで手動で実行すると、Releases は作らずに、VSIX だけを Actions の成果物（Artifacts）に置きます。
 
 構成、処理の流れ、テストについては [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) を見てください。
 

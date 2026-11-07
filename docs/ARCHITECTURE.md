@@ -62,14 +62,14 @@ flowchart LR
 | ファイル | 役割 |
 |---|---|
 | `package.json` | 拡張のマニフェスト。コマンド3つと右クリックメニューを宣言 |
-| `src/extension.ts` | 本体（約100行）。コマンドの登録と処理。テスト用に `_internal` で内部関数も公開 |
+| `src/extension.ts` | 本体。コマンドの登録と処理。テスト用に `_internal` で内部関数も公開 |
 | `out/` | `src/` のコンパイル結果。`package.json` の `main` はここを指す。git には入れない |
 | `tsconfig.json` | TypeScript の設定（`strict` で型を厳しくチェック） |
 | `.vscode/launch.json` / `tasks.json` | `F5` でコンパイルしてから拡張開発ホストを起動する設定 |
 | `README.md` | 使い方（GitHub のトップに表示される） |
 | `docs/ARCHITECTURE.md` | このファイル |
 | `LICENSE` | MIT ライセンス |
-| `.vscodeignore` | vsix に入れないファイルの指定（`src/`・`docs/`・`test/` など。vsix には `out/extension.js` だけが入る） |
+| `.vscodeignore` | vsix に入れないファイルの指定（`src/`・`docs/`・`test/` など。vsix に入るのは `out/extension.js`・`package.json`・README・LICENSE） |
 | `.gitignore` | git に入れないファイルの指定（`node_modules/`・`out/`・`*.vsix` など） |
 | `.github/workflows/release.yml` | タグを push すると、テスト → vsix 作成 → Releases に添付 |
 | `test/` | テスト一式（→ 10章）。vsix には含めない |
@@ -105,15 +105,15 @@ flowchart TB
 
 ## 4. src/extension.ts の関数
 
-| 関数 | 行 | 役割 |
-|---|---|---|
-| `activate(context)` | 82 | 3つのコマンドを登録（`sendSelection` と `sendCurrentFile` は同じ処理） |
-| `sendActiveEditor()` | 47 | エディタからの右クリック。アクティブなエディタを `insertMention` に渡す |
-| `sendFiles(clicked, selected)` | 59 | エクスプローラーからの右クリック。複数選択に対応。ファイルを開き、選択を空にしてから `insertMention` |
-| `insertMention(editor)` | 35 | 公式拡張の有無を確認 → 公式コマンドを実行。失敗したらフォールバック |
-| `fallbackCopy(editor, reason)` | 29 | 参照を作ってクリップボードにコピーし、警告を出す |
-| `buildReference(editor)` | 18 | `@path`, `@path#8`, `@path#5-10` を作る |
-| `relPath(uri)` | 13 | `asRelativePath` で公式と同じ形式のパスにする |
+| 関数 | 役割 |
+|---|---|
+| `activate(context)` | 3つのコマンドを登録（`sendSelection` と `sendCurrentFile` は同じ処理） |
+| `sendActiveEditor()` | エディタからの右クリック。アクティブなエディタを `insertMention` に渡す |
+| `sendFiles(clicked, selected)` | エクスプローラーからの右クリック。複数選択に対応。ファイルを開き、選択を空にしてから `insertMention` |
+| `insertMention(editor)` | 公式拡張の有無を確認 → 公式コマンドを実行。失敗したらフォールバック |
+| `fallbackCopy(editor, reason)` | 参照を作ってクリップボードにコピーし、警告を出す |
+| `buildReference(editor)` | `@path`, `@path#8`, `@path#5-10` を作る |
+| `relPath(uri)` | `asRelativePath` で公式と同じ形式のパスにする |
 
 ---
 
@@ -178,7 +178,7 @@ flowchart TD
 
 ## 6. 参照文字列の形式
 
-公式拡張（`Fx` / `RAe` 関数）の実装に合わせている。
+公式拡張のコマンド（`Alt+K`）を実際に動かしてチャットに入った文字列と比べ、同じ形式になるようにしている（フォールバックでクリップボードに入れるとき用）。
 
 | 状況 | 例 |
 |---|---|
@@ -228,6 +228,8 @@ npm run package   # = vsce package。直前に vscode:prepublish でコンパイ
 
 # 更新時は package.json の version を上げてから再パッケージ → VSIX から再インストール
 ```
+
+配布用の VSIX は GitHub Actions（`.github/workflows/release.yml`）が作る。`v*` のタグを push すると、`package` ジョブ（読み取り権限のみ）がテストと VSIX 作成を行い、`release` ジョブ（書き込み権限あり・依存は入れない）が Releases に添付する。手順は README の「リリースの手順」を参照。
 
 ---
 

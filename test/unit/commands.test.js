@@ -152,6 +152,15 @@ describe('エクスプローラーからの送信（sendFile）', () => {
     assert.deepEqual(state.clipboardWrites, ['@logo.png']);
   });
 
+  it('開けたファイルで公式コマンドが失敗 →「送信に失敗」として扱い、「開けない」と取り違えない', async () => {
+    const { state, run } = setup({ onExecute: () => { throw new Error('boom'); } });
+    await run('rightClickMention.sendFile', A);
+    assert.deepEqual(state.clipboardWrites, ['@a.js']);
+    assert.equal(state.warnings.length, 1);
+    assert.match(state.warnings[0], /送信に失敗/);
+    assert.doesNotMatch(state.warnings[0], /テキストとして開けない/);
+  });
+
   it('Claude拡張が無い → 各ファイルの参照をコピー（最後のものが残る）', async () => {
     const { state, run } = setup({ claudeInstalled: false });
     await run('rightClickMention.sendFile', A, [A, B]);

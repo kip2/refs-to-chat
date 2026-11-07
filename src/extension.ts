@@ -8,6 +8,13 @@ import * as vscode from 'vscode';
 const CLAUDE_EXT_ID = 'anthropic.claude-code';
 const CLAUDE_CMD = 'claude-vscode.insertAtMention';
 
+// この拡張のコマンド ID（package.json の contributes.commands と一致させる。manifest.test.js で確認）
+const COMMANDS = {
+  sendSelection: 'rightClickMention.sendSelection',
+  sendCurrentFile: 'rightClickMention.sendCurrentFile',
+  sendFile: 'rightClickMention.sendFile',
+} as const;
+
 // 公式拡張と同じパス形式: 単一フォルダなら "src/app.ts"、
 // 複数フォルダ（マルチルート）なら "フォルダ名/src/app.ts"、ワークスペース外なら絶対パス
 function relPath(uri: vscode.Uri): string {
@@ -29,12 +36,14 @@ function buildReference(editor: vscode.TextEditor): string {
 async function fallbackCopy(editor: vscode.TextEditor, reason: string): Promise<void> {
   const ref = buildReference(editor);
   await vscode.env.clipboard.writeText(ref);
-  vscode.window.showWarningMessage(`${reason} 参照をクリップボードにコピーしました: ${ref}`);
+  // 通知は await しない（await するとユーザーが閉じるまで処理が止まる）
+  void vscode.window.showWarningMessage(`${reason} 参照をクリップボードにコピーしました: ${ref}`);
 }
 
 async function insertMention(editor: vscode.TextEditor): Promise<void> {
   if (!vscode.extensions.getExtension(CLAUDE_EXT_ID)) {
-    return fallbackCopy(editor, 'Claude Code拡張が見つかりません。');
+    await fallbackCopy(editor, 'Claude Code拡張が見つかりません。');
+    return;
   }
   try {
     await vscode.commands.executeCommand(CLAUDE_CMD);
@@ -47,7 +56,7 @@ async function insertMention(editor: vscode.TextEditor): Promise<void> {
 async function sendActiveEditor(): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
-    vscode.window.showInformationMessage('アクティブなエディタがありません。');
+    void vscode.window.showInformationMessage('アクティブなエディタがありません。');
     return;
   }
   await insertMention(editor);
@@ -62,28 +71,31 @@ async function sendFiles(clicked?: vscode.Uri, selected?: (vscode.Uri | undefine
   );
   if (!uris.length) return;
   for (const uri of uris) {
+    let doc: vscode.TextDocument;
     try {
-      const doc = await vscode.workspace.openTextDocument(uri);
-      const editor = await vscode.window.showTextDocument(doc, {
-        preview: true,
-        preserveFocus: false,
-        selection: new vscode.Range(0, 0, 0, 0),
-      });
-      await insertMention(editor);
-    } catch {
+      doc = await vscode.workspace.openTextDocument(uri);
+    } catch (err) {
       // 画像などテキストで開けないファイル
+      console.error('[right-click-mention]', err);
       const path = relPath(uri);
       await vscode.env.clipboard.writeText(`@${path}`);
-      vscode.window.showWarningMessage(`テキストとして開けないため参照をコピーしました: @${path}`);
+      void vscode.window.showWarningMessage(`テキストとして開けないため参照をコピーしました: @${path}`);
+      continue;
     }
+    const editor = await vscode.window.showTextDocument(doc, {
+      preview: true,
+      preserveFocus: false,
+      selection: new vscode.Range(0, 0, 0, 0),
+    });
+    await insertMention(editor);
   }
 }
 
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('rightClickMention.sendSelection', sendActiveEditor),
-    vscode.commands.registerCommand('rightClickMention.sendCurrentFile', sendActiveEditor),
-    vscode.commands.registerCommand('rightClickMention.sendFile', sendFiles),
+    vscode.commands.registerCommand(COMMANDS.sendSelection, sendActiveEditor),
+    vscode.commands.registerCommand(COMMANDS.sendCurrentFile, sendActiveEditor),
+    vscode.commands.registerCommand(COMMANDS.sendFile, sendFiles),
   );
 }
 

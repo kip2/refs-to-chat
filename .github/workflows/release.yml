@@ -1,6 +1,10 @@
 # vsix を作って配る
 # - タグ v* を push したとき: テスト → vsix を作る → GitHub の Releases に添付
-# - Actions 画面から手動で実行したとき: テスト → vsix を作る → Actions の成果物（Artifacts）に置く
+# - Actions 画面からブランチを選んで手動で実行したとき: テスト → vsix を作る → Actions の成果物（Artifacts）に置くだけ
+#
+# 安全のため、依存を入れてビルドするジョブ（package）は読み取り権限だけで動かす。
+# Releases に書き込むジョブ（release）は依存を入れず、作った vsix を受け取って添付するだけにする。
+# 外部の Action は、タグの付け替えで中身が変わらないようにコミットの SHA で固定している。
 name: Release
 
 on:
@@ -10,17 +14,21 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write # Releases の作成に必要
+  contents: read
 
 jobs:
   package:
     runs-on: ubuntu-latest
+    outputs:
+      file: ${{ steps.pack.outputs.file }}
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 20
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
 
       - name: タグと package.json の version が一致しているか確認
         if: startsWith(github.ref, 'refs/tags/')
@@ -46,16 +54,32 @@ jobs:
           echo "file=$file" >> "$GITHUB_OUTPUT"
 
       - name: Actions の成果物に置く
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ${{ steps.pack.outputs.file }}
+          name: vsix
           path: ${{ steps.pack.outputs.file }}
+          if-no-files-found: error
 
-      - name: Releases に添付
-        if: startsWith(github.ref, 'refs/tags/')
+  release:
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Releases の作成に必要
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: vsix
+
+      - name: Releases に添付（同じタグのリリースが既にあれば vsix を差し替える）
         env:
           GH_TOKEN: ${{ github.token }}
+          FILE: ${{ needs.package.outputs.file }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "${{ steps.pack.outputs.file }}" \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes
+          if gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$FILE" -R "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$FILE" -R "$GITHUB_REPOSITORY" \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes
+          fi
