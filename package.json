@@ -49,15 +49,18 @@
     "commands": [
       {
         "command": "rightClickMention.sendSelection",
-        "title": "Claudeに選択範囲を送る"
+        "title": "選択範囲をClaudeのチャットに追加",
+        "category": "Right Click Mention"
       },
       {
         "command": "rightClickMention.sendCurrentFile",
-        "title": "Claudeにこのファイルを送る"
+        "title": "このファイルをClaudeのチャットに追加",
+        "category": "Right Click Mention"
       },
       {
         "command": "rightClickMention.sendFile",
-        "title": "Claudeにファイル・フォルダを送る"
+        "title": "Claudeのチャットに追加",
+        "category": "Right Click Mention"
       }
     ],
     "menus": {

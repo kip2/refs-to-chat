@@ -32,6 +32,10 @@ describe('package.json の基本項目', () => {
   it('コマンドにはすべてタイトルがある', () => {
     for (const c of pkg.contributes.commands) assert.ok(c.title, c.command);
   });
+
+  it('コマンドにはすべて category があり、パレットで拡張名が前に付く', () => {
+    for (const c of pkg.contributes.commands) assert.equal(c.category, pkg.displayName, c.command);
+  });
 });
 
 describe('宣言とコードの一致', () => {

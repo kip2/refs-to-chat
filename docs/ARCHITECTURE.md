@@ -17,9 +17,9 @@ flowchart LR
   subgraph VSCode["VS Code（1ウィンドウ = 1拡張ホスト）"]
     direction LR
     subgraph Menus["右クリックメニュー（package.json で宣言）"]
-      M1["エディタ: 選択あり<br/>Claudeに選択範囲を送る"]
-      M2["エディタ: 選択なし<br/>Claudeにこのファイルを送る"]
-      M3["エクスプローラー: ファイル・フォルダ<br/>Claudeにファイル・フォルダを送る"]
+      M1["エディタ: 選択あり<br/>選択範囲をClaudeのチャットに追加"]
+      M2["エディタ: 選択なし<br/>このファイルをClaudeのチャットに追加"]
+      M3["エクスプローラー: ファイル・フォルダ<br/>Claudeのチャットに追加"]
     end
 
     subgraph Ext["この拡張（src/extension.ts）"]
@@ -148,7 +148,7 @@ sequenceDiagram
   participant C as 公式Claude拡張
   participant W as Claudeチャット
 
-  U->>VS: 選択して右クリック →「Claudeに選択範囲を送る」
+  U->>VS: 選択して右クリック →「選択範囲をClaudeのチャットに追加」
   VS->>E: rightClickMention.sendSelection
   E->>E: activeTextEditor を取得
   E->>E: 公式拡張がインストール済みか確認
