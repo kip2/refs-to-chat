@@ -13,3 +13,4 @@ out/**/*.map
 tsconfig.json
 eslint.config.mjs
 package-lock.json
+.node-version

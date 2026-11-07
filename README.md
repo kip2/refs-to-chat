@@ -68,7 +68,7 @@ gh attestation verify right-click-mention-<バージョン>.vsix -R kip2/right-c
 
 ## 開発
 
-本体もテストも TypeScript で書いています（ソースは `src/`、テストは `src/test/`、コンパイル結果は `out/`）。Node.js 21 以上が必要です。このフォルダを VS Code で開き、`F5` を押すと、コンパイルしてから拡張を読み込んだ VS Code が起動します。
+本体もテストも TypeScript で書いています（ソースは `src/`、テストは `src/test/`、コンパイル結果は `out/`）。Node.js 26 を使います（`.node-version` に書いてあります）。このフォルダを VS Code で開き、`F5` を押すと、コンパイルしてから拡張を読み込んだ VS Code が起動します。
 
 ```bash
 npm install                 # 初回だけ
