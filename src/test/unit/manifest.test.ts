@@ -1,16 +1,38 @@
 // package.json（マニフェスト）とコードの整合性、公式拡張との互換性のテスト
-'use strict';
 
-const { describe, it } = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const { setup } = require('../helpers/vscode-mock');
-const { COMMANDS, CLAUDE } = require('../../out/constants');
+import * as fs from 'fs';
+import * as assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import * as os from 'os';
+import * as path from 'path';
+import { CLAUDE, COMMANDS } from '../../constants';
+import { setup } from '../helpers/vscodeMock';
 
-const ROOT = path.resolve(__dirname, '../..');
-const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+interface MenuItem {
+  command: string;
+  when?: string;
+  group?: string;
+}
+
+interface Manifest {
+  name: string;
+  displayName: string;
+  publisher: string;
+  version: string;
+  main: string;
+  engines: { vscode: string };
+  capabilities: { untrustedWorkspaces: { supported: boolean } };
+  contributes: {
+    commands: { command: string; title: string; category?: string }[];
+    menus: Record<string, MenuItem[]>;
+  };
+}
+
+// このファイルは out/test/unit/ にコンパイルされる
+const ROOT = path.resolve(__dirname, '../../..');
+const readManifest = (dir: string): Manifest => JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
+
+const pkg = readManifest(ROOT);
 const menus = pkg.contributes.menus;
 const declared = pkg.contributes.commands.map((c) => c.command);
 const TERMINAL_GUARD = '!config.claudeCode.useTerminal';
@@ -59,18 +81,26 @@ describe('宣言とコードの一致', () => {
 describe('メニューの表示条件', () => {
   const editor = menus['editor/context'];
   const explorer = menus['explorer/context'];
+  const palette = menus.commandPalette;
+
+  /** メニューの中から、そのコマンドの when を取り出す（無ければテストを失敗させる） */
+  function whenOf(items: MenuItem[], command: string): string {
+    const item = items.find((m) => m.command === command);
+    assert.ok(item?.when, `${command} の when が無い`);
+    return item.when;
+  }
 
   it('エディタ: 選択ありは sendSelection、なしは sendCurrentFile（排他）', () => {
-    const sel = editor.find((m) => m.command === 'rightClickMention.sendSelection');
-    const cur = editor.find((m) => m.command === 'rightClickMention.sendCurrentFile');
-    assert.match(sel.when, /(^|&& )editorHasSelection/);
-    assert.match(cur.when, /!editorHasSelection/);
-    assert.doesNotMatch(sel.when, /!editorHasSelection/);
+    const sel = whenOf(editor, COMMANDS.sendSelection);
+    const cur = whenOf(editor, COMMANDS.sendCurrentFile);
+    assert.match(sel, /(^|&& )editorHasSelection/);
+    assert.match(cur, /!editorHasSelection/);
+    assert.doesNotMatch(sel, /!editorHasSelection/);
   });
 
   it('エクスプローラー: ファイルにもフォルダにも出す', () => {
     assert.equal(explorer.length, 1);
-    assert.doesNotMatch(explorer[0].when, /explorerResourceIsFolder/);
+    assert.doesNotMatch(whenOf(explorer, COMMANDS.sendFile), /explorerResourceIsFolder/);
   });
 
   it('制限モード（信頼していないワークスペース）では動かない', () => {
@@ -78,30 +108,29 @@ describe('メニューの表示条件', () => {
   });
 
   it('右クリックメニューはすべてターミナル版の設定では出さない', () => {
-    for (const m of [...editor, ...explorer]) assert.ok(m.when.includes(TERMINAL_GUARD), m.command);
+    for (const m of [...editor, ...explorer]) assert.ok(m.when?.includes(TERMINAL_GUARD), m.command);
   });
 
   it('sendFile は引数（URI）が必要なのでコマンドパレットに出さない', () => {
-    const p = menus.commandPalette.find((m) => m.command === 'rightClickMention.sendFile');
-    assert.equal(p.when, 'false');
+    assert.equal(whenOf(palette, COMMANDS.sendFile), 'false');
   });
 
   it('パレットに出すコマンドもターミナル版の設定では出さない', () => {
-    for (const m of menus.commandPalette.filter((m) => m.when !== 'false')) {
+    for (const m of palette.filter((m) => m.when !== 'false')) {
       assert.equal(m.when, TERMINAL_GUARD, m.command);
     }
   });
 
   it('右クリックメニューは navigation グループ', () => {
-    for (const m of [...editor, ...explorer]) assert.match(m.group, /^navigation/);
+    for (const m of [...editor, ...explorer]) assert.match(m.group ?? '', /^navigation/);
   });
 });
 
 // インストール済みの公式拡張に、呼ぶコマンドがまだあるか確かめる（名前が変わったら気づける）
 // 見つからなければスキップ
 // 場所は CLAUDE_EXT_DIR で指定できる
-function findClaudeExtension() {
-  const candidates = [];
+function findClaudeExtension(): string | undefined {
+  const candidates: string[] = [];
   if (process.env.CLAUDE_EXT_DIR) candidates.push(process.env.CLAUDE_EXT_DIR);
   const extRoot = path.join(os.homedir(), '.vscode', 'extensions');
   if (fs.existsSync(extRoot)) {
@@ -118,8 +147,11 @@ function findClaudeExtension() {
 describe('公式 Claude Code 拡張との互換性', () => {
   const dir = findClaudeExtension();
 
-  it('呼び出すコマンドが公式拡張に存在する', { skip: !dir && '公式拡張が見つからないためスキップ' }, () => {
-    const claude = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
+  const skip = !dir && '公式拡張が見つからないためスキップ';
+
+  it('呼び出すコマンドが公式拡張に存在する', { skip }, () => {
+    assert.ok(dir);
+    const claude = readManifest(dir);
     const ids = claude.contributes.commands.map((c) => c.command);
     for (const cmd of [CLAUDE.insertMentionCommand, CLAUDE.focusInputCommand]) {
       assert.ok(ids.includes(cmd), `${cmd} が ${dir} に無い`);
@@ -128,9 +160,11 @@ describe('公式 Claude Code 拡張との互換性', () => {
     assert.equal(`${claude.publisher}.${claude.name}`.toLowerCase(), CLAUDE.extensionId.toLowerCase());
   });
 
-  it('公式拡張のパレット表示条件がこの拡張と同じ（ターミナル版で無効）', { skip: !dir && '公式拡張が見つからないためスキップ' }, () => {
-    const claude = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
-    const entry = (claude.contributes.menus.commandPalette || []).find((m) => m.command === 'claude-vscode.insertAtMention');
+  it('公式拡張のパレット表示条件がこの拡張と同じ（ターミナル版で無効）', { skip }, () => {
+    assert.ok(dir);
+    const claude = readManifest(dir);
+    const palette = claude.contributes.menus.commandPalette ?? [];
+    const entry = palette.find((m) => m.command === CLAUDE.insertMentionCommand);
     assert.ok(entry, 'commandPalette に insertAtMention が無い');
     assert.equal(entry.when, TERMINAL_GUARD);
   });

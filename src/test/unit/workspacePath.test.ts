@@ -1,18 +1,22 @@
 // 参照のパス形式のテスト
 // 公式拡張なしで実行し、クリップボードの中身で確かめる
 // パスの計算はモックの asRelativePath なので、本物の動きは統合テストで確かめる
-'use strict';
 
-const { describe, it, beforeEach, afterEach } = require('node:test');
-const assert = require('node:assert/strict');
-const { setup, makeEditor, makeSelection, Range } = require('../helpers/vscode-mock');
+import * as assert from 'node:assert/strict';
+import { afterEach, beforeEach, describe, it } from 'node:test';
+import { makeEditor, makeSelection, Range, setup } from '../helpers/vscodeMock';
 
 // 失敗時の console.error をテスト出力に出さない
-let origError;
-beforeEach(() => { origError = console.error; console.error = () => {}; });
-afterEach(() => { console.error = origError; });
+let origError: typeof console.error;
+beforeEach(() => {
+  origError = console.error;
+  console.error = () => {};
+});
+afterEach(() => {
+  console.error = origError;
+});
 
-async function ref(file, sel, folders) {
+async function ref(file: string, sel: Range, folders?: string[]): Promise<string> {
   const { vscode, state, run } = setup({ claudeInstalled: false, workspaceFolders: folders });
   vscode.window.activeTextEditor = makeEditor(file, sel);
   await run('rightClickMention.sendSelection');
@@ -46,9 +50,12 @@ describe('参照のパス形式', () => {
 
   it('asRelativePath に第2引数を渡さない（公式拡張と同じ扱い）', async () => {
     const { vscode, run } = setup({ claudeInstalled: false });
-    const argCounts = [];
+    const argCounts: number[] = [];
     const orig = vscode.workspace.asRelativePath;
-    vscode.workspace.asRelativePath = (...args) => { argCounts.push(args.length); return orig(...args); };
+    vscode.workspace.asRelativePath = (...args: Parameters<typeof orig>) => {
+      argCounts.push(args.length);
+      return orig(...args);
+    };
     vscode.window.activeTextEditor = makeEditor('/ws/project/x.js');
     await run('rightClickMention.sendCurrentFile');
     assert.deepEqual(argCounts, [1]);

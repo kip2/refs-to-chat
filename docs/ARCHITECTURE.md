@@ -5,7 +5,7 @@
 
 - バージョン: 0.0.2
 - 対象モード: VS Code のClaudeパネル版のみ（`claudeCode.useTerminal` が true のときはメニューを出さない）
-- 言語: TypeScript（`src/` を `tsc` で `out/` にコンパイル。テストは JavaScript のまま `out/` を読む）
+- 言語: TypeScript（本体もテストも `src/` に置き、`tsc` で `out/` にコンパイル）
 - 対象: VS Code 1.94 以上、公式拡張 `anthropic.claude-code`（v2.1.317 で確認）
 
 ---
@@ -78,12 +78,12 @@ flowchart LR
 | `README.md` | 使い方（GitHub のトップに表示される） |
 | `docs/ARCHITECTURE.md` | このファイル |
 | `LICENSE` | MIT ライセンス |
-| `.vscodeignore` | vsix に入れないファイルの指定（`src/`・`docs/`・`test/` など。vsix に入るのは `out/*.js`・`package.json`・README・LICENSE） |
+| `.vscodeignore` | vsix に入れないファイルの指定（`src/`・`docs/`・`out/test/` など。vsix に入るのは `out/*.js`・`package.json`・README・LICENSE） |
 | `.gitignore` | git に入れないファイルの指定（`node_modules/`・`out/`・`*.vsix` など） |
 | `.github/workflows/release.yml` | タグを push すると、テスト → vsix 作成 → Releases に添付（→ 9章） |
 | `.github/dependabot.yml` | Action と devDependencies の更新を PR で知らせる |
 | `.gitattributes` | 改行を LF にそろえる |
-| `test/` | テスト一式（→ 10章）。vsix には含めない |
+| `src/test/` | テスト一式（→ 10章）。`out/test/` にコンパイルされるが、vsix には含めない |
 
 vsix はリポジトリに入れない。配るときは `npm run package` で作り、GitHub の Releases に添付する。
 
@@ -311,18 +311,18 @@ npm run package   # = vsce package。直前に vscode:prepublish でコンパイ
 ```mermaid
 flowchart LR
   subgraph Unit["ユニットテスト（npm test・数百ms）"]
-    M["test/helpers/vscode-mock.js<br/>VS Code APIのモック<br/>呼び出しを記録"]
-    U0["reference.test.js<br/>参照の文字列（モックなし）"]
-    U1["workspacePath.test.js<br/>パス形式"]
-    U2["commands.test.js<br/>登録・送信・貼り付け・コピー"]
-    U3["manifest.test.js<br/>package.json の整合性<br/>公式拡張との互換性"]
+    M["helpers/vscodeMock.ts<br/>VS Code APIのモック<br/>呼び出しを記録"]
+    U0["reference.test.ts<br/>参照の文字列（モックなし）"]
+    U1["workspacePath.test.ts<br/>パス形式"]
+    U2["commands.test.ts<br/>登録・送信・貼り付け・コピー"]
+    U3["manifest.test.ts<br/>package.json の整合性<br/>公式拡張との互換性"]
     M --> U1 & U2 & U3
   end
   U0 --> REF["out/reference.js"]
   subgraph Int["統合テスト（npm run test:integration）"]
-    R["runTest.js<br/>テスト用VS Codeを起動"]
+    R["runTest.ts<br/>テスト用VS Codeを起動"]
     W["fixtures/multi-root<br/>alpha / beta"]
-    I["suite/extension.itest.js<br/>実APIで確認"]
+    I["suite/extension.itest.ts<br/>実APIで確認"]
     R --> W --> I
   end
   EXT["out/extension.js<br/>（src/ をコンパイル）"]
@@ -335,15 +335,14 @@ flowchart LR
 
 | ファイル | 内容 | 件数 |
 |---|---|---|
-| `test/helpers/vscode-mock.js` | VS Code API のモック。`asRelativePath` のマルチルート挙動、`Selection` の正規化、バイナリで開けないファイルなどを再現。`setup()` でモック＋拡張＋activate を一度に用意（`out/` のファイルは毎回読み込み直す） | — |
-| `test/unit/reference.test.js` | 行番号（1行・複数行・次行先頭で終わる・逆方向選択）、フォルダの `/`、空白でつなぐ。`out/reference.js` をモックなしで直接読む | 12 |
-| `test/unit/workspacePath.test.js` | パス形式（単一・マルチルート・別の場所・入れ子・ワークスペース外）。コマンドを実行し、コピーされた参照で確かめる | 6 |
-| `test/unit/commands.test.js` | コマンド登録と dispose、`extension.js` が activate / deactivate だけを出すこと、送信の分岐（成功・拡張なし・例外・reject）、エクスプローラー（単一・複数・空・引数なし・バイナリ混在・フォルダの貼り付け・貼り付け失敗・拡張なし・ファイルとフォルダの混在・コピーと警告を 1 回にまとめる・同じ理由を 1 回だけ書く）、失敗の経路（フォーカス後の貼り付け失敗・フォルダか調べられない・エディタで表示できない・シンボリックリンクのフォルダ） | 32 |
-| `test/unit/manifest.test.js` | package.json の基本項目と category、宣言とコード（`COMMANDS`）の一致、メニューの `when` 条件、制限モードの宣言、公式拡張にコマンドが存在するか | 17 |
-| `test/run-unit.js` | ユニットテストの実行スクリプト（Windows / 古いNodeでも動くようにファイルを列挙） | — |
-| `test/integration/runTest.js` | `@vscode/test-electron` でテスト用VS Codeを起動（他の拡張は無効） | — |
-| `test/integration/suite/extension.itest.js` | 実VS Code上でマルチルートのパス、選択の扱い、エクスプローラー送信、バイナリファイル、フォルダの判定、ファイルとフォルダの混在 | 16 |
-| `test/fixtures/multi-root/` | 統合テスト用ワークスペース（同名の `app.js` を持つ alpha / beta、バイナリファイル） | — |
+| `src/test/helpers/vscodeMock.ts` | VS Code API のモック。`asRelativePath` のマルチルート挙動、`Selection` の正規化、バイナリで開けないファイルなどを再現。`setup()` でモック＋拡張＋activate を一度に用意（`out/` のファイルは毎回読み込み直す） | — |
+| `src/test/unit/reference.test.ts` | 行番号（1行・複数行・次行先頭で終わる・逆方向選択）、フォルダの `/`、空白でつなぐ。`reference.ts` をモックなしで直接 import する | 12 |
+| `src/test/unit/workspacePath.test.ts` | パス形式（単一・マルチルート・別の場所・入れ子・ワークスペース外）。コマンドを実行し、コピーされた参照で確かめる | 6 |
+| `src/test/unit/commands.test.ts` | コマンド登録と dispose、`extension.ts` が activate / deactivate だけを出すこと、送信の分岐（成功・拡張なし・例外・reject）、エクスプローラー（単一・複数・空・引数なし・バイナリ混在・フォルダの貼り付け・貼り付け失敗・拡張なし・ファイルとフォルダの混在・コピーと警告を 1 回にまとめる・同じ理由を 1 回だけ書く）、失敗の経路（フォーカス後の貼り付け失敗・フォルダか調べられない・エディタで表示できない・シンボリックリンクのフォルダ） | 32 |
+| `src/test/unit/manifest.test.ts` | package.json の基本項目と category、宣言とコード（`COMMANDS`）の一致、メニューの `when` 条件、制限モードの宣言、公式拡張にコマンドが存在するか | 17 |
+| `src/test/integration/runTest.ts` | `@vscode/test-electron` でテスト用VS Codeを起動（他の拡張は無効） | — |
+| `src/test/integration/suite/extension.itest.ts` | 実VS Code上でマルチルートのパス、選択の扱い、エクスプローラー送信、バイナリファイル、フォルダの判定、ファイルとフォルダの混在 | 16 |
+| `src/test/fixtures/multi-root/` | 統合テスト用ワークスペース（同名の `app.js` を持つ alpha / beta、バイナリファイル） | — |
 
 ### 実行方法
 
@@ -356,7 +355,8 @@ npm run test:integration    # コンパイル → 統合テスト（初回はテ
 
 ### ポイント
 
-- **テストは JavaScript のまま**: テストはコンパイル後の `out/` を読む（`extension.js` はモック経由、`reference.js`・`constants.js` は直接）。テストのためだけの公開（以前の `_internal`）はない。そのため `npm test` などは、先に `npm run compile` を自動で実行する（`pretest`）。ユニットテスト自体は Node 標準の `node:test` を使い、テスト用のライブラリは要らない。
+- **テストも TypeScript**: `src/test/` に置き、本体と一緒に `out/test/` にコンパイルする（公式の雛形と同じ形）。`reference.ts`・`constants.ts` は直接 import し、`extension.ts` はモックを差し込んでから読み込む（型だけは `typeof import('../../extension')` で使う）。テストのためだけの公開（以前の `_internal`）はない。
+- **`npm test` の流れ**: `out/` を消してからコンパイルし（`npm run build`。消したファイルが `out/` に残って動き続けるのを防ぐ）、`node --test "out/test/unit/**/*.test.js"` で実行する。ファイルの探し方を Node に任せるので、Node 21 以上が必要（CI は Node 22）。ユニットテストは Node 標準の `node:test`、統合テストは VS Code の中で `mocha` を使う。
 - **公式拡張の更新を検知**: `manifest.test.js` は `~/.vscode/extensions/anthropic.claude-code-*` の package.json を読み、呼んでいる `claude-vscode.insertAtMention` と `claude-vscode.focus` がまだ存在するかを確認する。公式拡張を更新した後に `npm test` を流せば、コマンド名の変更に気づける。見つからない環境ではスキップ（`CLAUDE_EXT_DIR` で場所を指定可能）。
 - **統合テストは公式拡張なし**: テスト用VS Codeでは他の拡張を無効にするため、送信結果はクリップボードで確認する（フォールバック経路）。公式拡張のチャット欄に入るところは自動テストできないので、手動で確認する。
 - **テストの効き目を確認済み**: わざとバグを入れて（行番号の0始まり、コマンドID誤り、例外の握りつぶし、選択リセット削除、複数選択の無視、フォルダ名の欠落、メニュー条件の欠落 など9種類）すべて検出できることを確認した。ファイルを分けたあとにも、8 種類（行番号の0始まり、行末まで選んだときの行、フォルダの判定、フォルダの貼り付け、参照のつなぎ方、公式コマンドの失敗の握りつぶし、エクスプローラーでの失敗の無視、選択のリセット）で同じことを確かめた。

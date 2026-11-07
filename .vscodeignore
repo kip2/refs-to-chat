@@ -7,8 +7,8 @@
 *.vsix
 docs/**
 src/**
-test/**
 node_modules/**
+out/test/**
 out/**/*.map
 tsconfig.json
 package-lock.json

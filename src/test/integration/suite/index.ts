@@ -1,11 +1,10 @@
 // VS Code の中で実行されるテストランナー（mocha）
-'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const Mocha = require('mocha');
+import * as fs from 'fs';
+import * as path from 'path';
+import Mocha = require('mocha');
 
-exports.run = function run() {
+export function run(): Promise<void> {
   const mocha = new Mocha({ ui: 'bdd', timeout: 20000, color: true });
   fs.readdirSync(__dirname)
     .filter((f) => f.endsWith('.itest.js'))
@@ -14,4 +13,4 @@ exports.run = function run() {
   return new Promise((resolve, reject) => {
     mocha.run((failures) => (failures ? reject(new Error(`${failures} 件のテストが失敗しました`)) : resolve()));
   });
-};
+}

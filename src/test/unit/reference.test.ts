@@ -1,11 +1,10 @@
 // 参照の文字列（@path#start-end）を作る処理のテスト
-// reference.js は vscode に依存しないので、モックなしで直接読み込む
-'use strict';
+// reference.ts は vscode に依存しないので、モックなしで直接読み込む
 
-const { describe, it } = require('node:test');
-const assert = require('node:assert/strict');
-const { fileReference, folderReference, joinReferences } = require('../../out/reference');
-const { makeSelection, Range } = require('../helpers/vscode-mock');
+import * as assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import { fileReference, folderReference, joinReferences } from '../../reference';
+import { makeSelection, Range } from '../helpers/vscodeMock';
 
 const PATH = 'src/app.ts';
 

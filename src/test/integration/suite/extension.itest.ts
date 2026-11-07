@@ -1,21 +1,22 @@
 // 実際の VS Code 上で動かすテスト
-// ワークスペース: test/fixtures/multi-root（alpha / beta の2フォルダ）
+// ワークスペース: src/test/fixtures/multi-root（alpha / beta の2フォルダ）
 // 公式 Claude 拡張は無効なので、送信結果はクリップボードの中身で確認する
-'use strict';
 
-const assert = require('assert');
-const vscode = require('vscode');
+import * as assert from 'assert';
+import * as vscode from 'vscode';
 
 const EXT_ID = 'kip2.right-click-mention';
 const IDS = ['rightClickMention.sendSelection', 'rightClickMention.sendCurrentFile', 'rightClickMention.sendFile'];
 
-function fileIn(folderName, rel) {
-  const folder = vscode.workspace.workspaceFolders.find((f) => f.name === folderName);
+const folders = () => vscode.workspace.workspaceFolders ?? [];
+
+function fileIn(folderName: string, rel: string): vscode.Uri {
+  const folder = folders().find((f) => f.name === folderName);
   assert.ok(folder, `ワークスペースに ${folderName} が無い`);
   return vscode.Uri.joinPath(folder.uri, ...rel.split('/'));
 }
 
-async function openWithSelection(uri, sl, sc, el, ec) {
+async function openWithSelection(uri: vscode.Uri, sl: number, sc: number, el: number, ec: number) {
   const doc = await vscode.workspace.openTextDocument(uri);
   const editor = await vscode.window.showTextDocument(doc);
   editor.selection = new vscode.Selection(sl, sc, el, ec);
@@ -38,7 +39,7 @@ describe('Right Click Mention（実VS Code・マルチルート）', function ()
 
   describe('前提条件', function () {
     it('ワークスペースが alpha / beta の2フォルダ', function () {
-      assert.deepStrictEqual(vscode.workspace.workspaceFolders.map((f) => f.name), ['alpha', 'beta']);
+      assert.deepStrictEqual(folders().map((f) => f.name), ['alpha', 'beta']);
     });
 
     it('公式 Claude 拡張は無効（フォールバック経路をテストするため）', function () {
@@ -100,6 +101,7 @@ describe('Right Click Mention（実VS Code・マルチルート）', function ()
       await vscode.commands.executeCommand('rightClickMention.sendFile', uri, [uri]);
       assert.strictEqual(await clipboard(), '@beta/src/only-in-beta.js');
       const ed = vscode.window.activeTextEditor;
+      assert.ok(ed);
       assert.strictEqual(ed.document.uri.toString(), uri.toString());
       assert.ok(ed.selection.isEmpty);
     });
@@ -117,7 +119,7 @@ describe('Right Click Mention（実VS Code・マルチルート）', function ()
       const b = fileIn('beta', 'src/only-in-beta.js');
       await vscode.commands.executeCommand('rightClickMention.sendFile', a, [a, b]);
       assert.strictEqual(await clipboard(), '@alpha/src/app.js @beta/src/only-in-beta.js');
-      assert.strictEqual(vscode.window.activeTextEditor.document.uri.toString(), b.toString());
+      assert.strictEqual(vscode.window.activeTextEditor?.document.uri.toString(), b.toString());
     });
 
     it('バイナリファイル → 開かずに @path をコピー', async function () {

@@ -27,17 +27,20 @@
     }
   },
   "scripts": {
+    "clean": "node -e \"require('fs').rmSync('out', { recursive: true, force: true })\"",
     "compile": "tsc -p ./",
+    "build": "npm run clean && npm run compile",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile",
-    "test": "node test/run-unit.js",
-    "test:spec": "npm run compile && node test/run-unit.js --test-reporter=spec",
-    "pretest:integration": "npm run compile",
-    "test:integration": "node test/integration/runTest.js",
-    "vscode:prepublish": "npm run compile",
+    "pretest": "npm run build",
+    "test": "node --test \"out/test/unit/**/*.test.js\"",
+    "test:spec": "npm run build && node --test --test-reporter=spec \"out/test/unit/**/*.test.js\"",
+    "pretest:integration": "npm run build",
+    "test:integration": "node out/test/integration/runTest.js",
+    "vscode:prepublish": "npm run build",
     "package": "vsce package"
   },
   "devDependencies": {
+    "@types/mocha": "^10.0.10",
     "@types/node": "^20.17.6",
     "@types/vscode": "~1.94.0",
     "@vscode/test-electron": "^2.5.2",

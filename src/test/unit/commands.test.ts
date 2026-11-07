@@ -1,10 +1,9 @@
 // コマンドの登録と、送信・フォールバックの分岐のテスト
-'use strict';
 
-const { describe, it, beforeEach, afterEach } = require('node:test');
-const assert = require('node:assert/strict');
-const { setup, makeEditor, makeSelection, uri } = require('../helpers/vscode-mock');
-const { CLAUDE, PASTE_COMMAND } = require('../../out/constants');
+import * as assert from 'node:assert/strict';
+import { afterEach, beforeEach, describe, it } from 'node:test';
+import { CLAUDE, PASTE_COMMAND } from '../../constants';
+import { makeEditor, makeSelection, setup, uri } from '../helpers/vscodeMock';
 
 // constants.ts から読まずに直書きしているのは、ID が勝手に変わったら気づけるようにするため
 const CMD = 'claude-vscode.insertAtMention';
@@ -13,9 +12,14 @@ const PASTE = 'editor.action.clipboardPasteAction';
 const IDS = ['rightClickMention.sendSelection', 'rightClickMention.sendCurrentFile', 'rightClickMention.sendFile'];
 
 // 失敗時の console.error をテスト出力に出さない
-let origError;
-beforeEach(() => { origError = console.error; console.error = () => {}; });
-afterEach(() => { console.error = origError; });
+let origError: typeof console.error;
+beforeEach(() => {
+  origError = console.error;
+  console.error = () => {};
+});
+afterEach(() => {
+  console.error = origError;
+});
 
 describe('activate / deactivate', () => {
   it('3つのコマンドを登録し、すべて subscriptions に入れる', () => {
@@ -42,7 +46,7 @@ describe('activate / deactivate', () => {
     assert.equal(PASTE_COMMAND, PASTE);
   });
 
-  it('extension.js が公開するのは activate と deactivate だけ', () => {
+  it('extension.ts が公開するのは activate と deactivate だけ', () => {
     const { ext } = setup();
     assert.deepEqual(Object.keys(ext).sort(), ['activate', 'deactivate']);
   });
@@ -110,8 +114,8 @@ describe('エクスプローラーからの送信（sendFile）', () => {
     const o = state.shown[0].options;
     assert.equal(o.preview, true);
     assert.equal(o.preserveFocus, false);
-    assert.ok(o.selection.isEmpty);
-    assert.equal(o.selection.start.line, 0);
+    assert.ok(o.selection?.isEmpty);
+    assert.equal(o.selection?.start.line, 0);
     assert.deepEqual(state.executed, [CMD]);
   });
 
