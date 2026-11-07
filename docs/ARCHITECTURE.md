@@ -163,7 +163,6 @@ flowchart TD
 - 参照の形式を変える・増やす → `reference.ts`（テストはモックなしで書ける）
 - 貼り付けるかコピーするかの条件を変える（自動の貼り付けを切る設定など） → `fallback.ts` の `deliverDeferredReferences` だけ
 - 設定を足す → `package.json` の `contributes.configuration` に宣言し、読む処理を使う側のファイルに置く
-- ターミナル版にも対応する → `claudeChat.ts` で分岐し、`package.json` の `when` から `!config.claudeCode.useTerminal` を外す
 
 ---
 
