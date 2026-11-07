@@ -1,4 +1,4 @@
-// VS Code API の最小限のモック。extension.js が使う部分だけを再現し、呼び出しを記録する。
+// VS Code API の最小限のモック。src/extension.ts（コンパイル後の out/extension.js）が使う部分だけを再現し、呼び出しを記録する。
 'use strict';
 
 const path = require('path');
@@ -122,9 +122,9 @@ function createVscodeMock(opts = {}) {
   return { vscode, state };
 }
 
-const EXT_PATH = path.resolve(__dirname, '../../extension.js');
+const EXT_PATH = path.resolve(__dirname, '../../out/extension.js');
 
-/** モックを差し込んで extension.js を毎回まっさらに読み込む */
+/** モックを差し込んで out/extension.js を毎回まっさらに読み込む */
 function loadExtension(vscode) {
   const origLoad = Module._load;
   Module._load = function (request, ...rest) {

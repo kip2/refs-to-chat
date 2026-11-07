@@ -7,6 +7,10 @@
 const path = require('path');
 const { runTests } = require('@vscode/test-electron');
 
+// VS Code の中（ターミナルや拡張）から実行すると ELECTRON_RUN_AS_NODE=1 が引き継がれ、
+// テスト用の VS Code が Node.js として起動してしまう。テスト用の VS Code には渡さない。
+delete process.env.ELECTRON_RUN_AS_NODE;
+
 async function main() {
   const extensionDevelopmentPath = path.resolve(__dirname, '../..');
   const extensionTestsPath = path.resolve(__dirname, 'suite/index.js');

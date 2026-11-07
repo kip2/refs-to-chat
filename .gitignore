@@ -1,5 +1,6 @@
 # 依存・テスト用 VS Code・パッケージ
 node_modules/
+out/
 .vscode-test/
 *.vsix
 

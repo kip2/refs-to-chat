@@ -31,7 +31,10 @@ jobs:
             exit 1
           fi
 
-      - name: ユニットテスト
+      - name: 依存を入れる
+        run: npm ci
+
+      - name: ユニットテスト（先に TypeScript をコンパイルする）
         run: npm test
 
       - name: vsix を作る
@@ -39,7 +42,7 @@ jobs:
         run: |
           version=$(node -p "require('./package.json').version")
           file="right-click-mention-$version.vsix"
-          npx --yes @vscode/vsce@3.9.2 package --out "$file"
+          npx vsce package --out "$file"
           echo "file=$file" >> "$GITHUB_OUTPUT"
 
       - name: Actions の成果物に置く

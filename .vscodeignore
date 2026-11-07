@@ -6,5 +6,9 @@
 .gitignore
 *.vsix
 docs/**
+src/**
 test/**
 node_modules/**
+out/**/*.map
+tsconfig.json
+package-lock.json

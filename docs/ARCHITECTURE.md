@@ -5,7 +5,7 @@
 
 - バージョン: 0.0.1
 - 対象モード: VS Code のClaudeパネル版のみ（`claudeCode.useTerminal` が true のときはメニューを出さない）
-- 言語: 素の JavaScript（ビルド不要）
+- 言語: TypeScript（`src/` を `tsc` で `out/` にコンパイル。テストは JavaScript のまま `out/` を読む）
 - 対象: VS Code 1.94 以上、公式拡張 `anthropic.claude-code`（v2.1.317 で確認）
 
 ---
@@ -22,7 +22,7 @@ flowchart LR
       M3["エクスプローラー: ファイル<br/>Claudeにファイルを送る"]
     end
 
-    subgraph Ext["この拡張（extension.js）"]
+    subgraph Ext["この拡張（src/extension.ts）"]
       SAE["sendActiveEditor()"]
       SF["sendFiles(clicked, selected)"]
       IM["insertMention(editor)"]
@@ -62,12 +62,16 @@ flowchart LR
 | ファイル | 役割 |
 |---|---|
 | `package.json` | 拡張のマニフェスト。コマンド3つと右クリックメニューを宣言 |
-| `extension.js` | 本体（約95行）。コマンドの登録と処理。テスト用に `_internal` で内部関数も公開 |
+| `src/extension.ts` | 本体（約100行）。コマンドの登録と処理。テスト用に `_internal` で内部関数も公開 |
+| `out/` | `src/` のコンパイル結果。`package.json` の `main` はここを指す。git には入れない |
+| `tsconfig.json` | TypeScript の設定（`strict` で型を厳しくチェック） |
+| `.vscode/launch.json` / `tasks.json` | `F5` でコンパイルしてから拡張開発ホストを起動する設定 |
 | `README.md` | 使い方（GitHub のトップに表示される） |
 | `docs/ARCHITECTURE.md` | このファイル |
 | `LICENSE` | MIT ライセンス |
-| `.vscodeignore` | vsix に入れないファイルの指定（`docs/`・`test/` など） |
-| `.gitignore` | git に入れないファイルの指定（`node_modules/`・`*.vsix` など） |
+| `.vscodeignore` | vsix に入れないファイルの指定（`src/`・`docs/`・`test/` など。vsix には `out/extension.js` だけが入る） |
+| `.gitignore` | git に入れないファイルの指定（`node_modules/`・`out/`・`*.vsix` など） |
+| `.github/workflows/release.yml` | タグを push すると、テスト → vsix 作成 → Releases に添付 |
 | `test/` | テスト一式（→ 10章）。vsix には含めない |
 
 vsix はリポジトリに入れない。配るときは `npm run package` で作り、GitHub の Releases に添付する。
@@ -99,13 +103,13 @@ flowchart TB
 
 ---
 
-## 4. extension.js の関数
+## 4. src/extension.ts の関数
 
 | 関数 | 行 | 役割 |
 |---|---|---|
-| `activate(context)` | 78 | 3つのコマンドを登録（`sendSelection` と `sendCurrentFile` は同じ処理） |
+| `activate(context)` | 82 | 3つのコマンドを登録（`sendSelection` と `sendCurrentFile` は同じ処理） |
 | `sendActiveEditor()` | 47 | エディタからの右クリック。アクティブなエディタを `insertMention` に渡す |
-| `sendFiles(clicked, selected)` | 57 | エクスプローラーからの右クリック。複数選択に対応。ファイルを開き、選択を空にしてから `insertMention` |
+| `sendFiles(clicked, selected)` | 59 | エクスプローラーからの右クリック。複数選択に対応。ファイルを開き、選択を空にしてから `insertMention` |
 | `insertMention(editor)` | 35 | 公式拡張の有無を確認 → 公式コマンドを実行。失敗したらフォールバック |
 | `fallbackCopy(editor, reason)` | 29 | 参照を作ってクリップボードにコピーし、警告を出す |
 | `buildReference(editor)` | 18 | `@path`, `@path#8`, `@path#5-10` を作る |
@@ -191,7 +195,7 @@ flowchart TD
 ## 7. 設計上の判断
 
 - **公式コマンドに委ねる**: 参照の形式やチャットへの挿入方法を公式と完全に一致させられ、コードも短い。
-- **コマンドIDは公開APIではない**: 公式拡張の更新で名前が変わると動かなくなる。その場合は `extension.js` 冒頭の `CLAUDE_CMD` を書き換える（キーボードショートカット画面で「Insert @-Mention」を検索 → 右クリック →「コマンドIDをコピー」）。
+- **公式拡張のコマンドに依存する**: 公式拡張の更新でコマンド名が変わると動かなくなる。その場合は `src/extension.ts` 冒頭の `CLAUDE_CMD` を書き換える（キーボードショートカット画面で「Insert @-Mention」を検索 → 右クリック →「コマンドIDをコピー」）。
 - **失敗しても無駄にしない**: 送れない時はクリップボードにコピーし、手で貼れるようにしている。
 
 ---
@@ -213,10 +217,14 @@ flowchart TD
 
 ```bash
 # 動作確認（このフォルダを VS Code で開いて）
-F5   # 拡張開発ホストが起動する
+F5   # npm run compile をしてから拡張開発ホストが起動する（.vscode/launch.json）
+
+# コンパイル
+npm run compile   # src/ → out/
+npm run watch     # 保存のたびにコンパイル
 
 # パッケージ化
-npm run package   # = vsce package（package.json の repository を使う）
+npm run package   # = vsce package。直前に vscode:prepublish でコンパイルされる
 
 # 更新時は package.json の version を上げてから再パッケージ → VSIX から再インストール
 ```
@@ -240,7 +248,7 @@ flowchart LR
     I["suite/extension.itest.js<br/>実APIで確認"]
     R --> W --> I
   end
-  EXT["extension.js"]
+  EXT["out/extension.js<br/>（src/extension.ts をコンパイル）"]
   U1 & U2 --> EXT
   I --> EXT
   U3 -.->|~/.vscode/extensions の<br/>公式 package.json| CL["公式Claude拡張"]
@@ -262,15 +270,15 @@ flowchart LR
 ### 実行方法
 
 ```bash
-npm install                 # 初回のみ（テスト用の依存を入れる）
-npm test                    # ユニットテスト
-npm run test:spec           # ユニットテスト（結果を一覧表示）
-npm run test:integration    # 統合テスト（初回はテスト用VS Codeをダウンロード）
+npm install                 # 初回のみ（TypeScript とテスト用の依存を入れる）
+npm test                    # コンパイル → ユニットテスト
+npm run test:spec           # コンパイル → ユニットテスト（結果を一覧表示）
+npm run test:integration    # コンパイル → 統合テスト（初回はテスト用VS Codeをダウンロード）
 ```
 
 ### ポイント
 
-- **ユニットテストは依存なし**: Node 標準の `node:test` を使うので `npm install` なしでも `npm test` が動く。
+- **テストは JavaScript のまま**: テストはコンパイル後の `out/extension.js` を読む。そのため `npm test` などは、先に `npm run compile` を自動で実行する（`pretest`）。ユニットテスト自体は Node 標準の `node:test` を使い、テスト用のライブラリは要らない。
 - **公式拡張の更新を検知**: `manifest.test.js` は `~/.vscode/extensions/anthropic.claude-code-*` の package.json を読み、呼んでいる `claude-vscode.insertAtMention` がまだ存在するかを確認する。公式拡張を更新した後に `npm test` を流せば、コマンド名の変更に気づける。見つからない環境ではスキップ（`CLAUDE_EXT_DIR` で場所を指定可能）。
 - **統合テストは公式拡張なし**: テスト用VS Codeでは他の拡張を無効にするため、送信結果はクリップボードで確認する（フォールバック経路）。公式拡張のチャット欄に入るところは自動テストできないので、手動で確認する。
 - **テストの効き目を確認済み**: わざとバグを入れて（行番号の0始まり、コマンドID誤り、例外の握りつぶし、選択リセット削除、複数選択の無視、フォルダ名の欠落、メニュー条件の欠落 など9種類）すべて検出できることを確認した。

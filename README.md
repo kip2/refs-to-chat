@@ -42,11 +42,12 @@ code --install-extension right-click-mention-<バージョン>.vsix
 
 ## 開発
 
-ビルドは要りません（素の JavaScript です）。このフォルダを VS Code で開き、`F5` を押すと、拡張を読み込んだ VS Code が起動します。
+TypeScript で書いています（ソースは `src/`、コンパイル結果は `out/`）。このフォルダを VS Code で開き、`F5` を押すと、コンパイルしてから拡張を読み込んだ VS Code が起動します。
 
 ```bash
 npm install                 # 初回だけ
-npm test                    # ユニットテスト
+npm run compile             # TypeScript をコンパイルする（npm run watch なら保存のたびにコンパイル）
+npm test                    # コンパイルしてからユニットテスト
 npm run test:integration    # 本物の VS Code を使う統合テスト（初回はテスト用の VS Code をダウンロード）
 npm run package             # VSIX ファイルを作る
 ```
