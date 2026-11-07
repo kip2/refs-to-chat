@@ -7,6 +7,12 @@ import * as vscode from 'vscode';
 
 const CLAUDE_EXT_ID = 'anthropic.claude-code';
 const CLAUDE_CMD = 'claude-vscode.insertAtMention';
+// 公式拡張の「Claude Code: Focus input」。チャットの入力欄にフォーカスを移す
+const CLAUDE_FOCUS_CMD = 'claude-vscode.focus';
+// VS Code 標準の貼り付け。フォーカスのある場所（チャットの入力欄）にクリップボードの中身を貼る
+const PASTE_CMD = 'editor.action.clipboardPasteAction';
+// フォーカスがチャットの入力欄に移るまで待つ時間（ミリ秒）
+const FOCUS_WAIT_MS = 150;
 
 // この拡張のコマンド ID（package.json の contributes.commands と一致させる。manifest.test.js で確認）
 const COMMANDS = {
@@ -58,9 +64,30 @@ async function copyReferences(refs: string[], reasons: Iterable<Reason>): Promis
   void vscode.window.showWarningMessage(`${why}。参照をクリップボードにコピーしました: ${text}`);
 }
 
+function hasClaude(): boolean {
+  return Boolean(vscode.extensions.getExtension(CLAUDE_EXT_ID));
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+// クリップボードの中身を、Claude のチャット入力欄に貼り付ける。
+// 公開されている「Focus input」と VS Code 標準の貼り付けを順に呼ぶだけ。
+// 貼り付けが本当に入ったかは確かめられないので、呼べたら true を返す。
+async function pasteIntoClaude(): Promise<boolean> {
+  try {
+    await vscode.commands.executeCommand(CLAUDE_FOCUS_CMD);
+    await sleep(FOCUS_WAIT_MS);
+    await vscode.commands.executeCommand(PASTE_CMD);
+    return true;
+  } catch (err) {
+    console.error('[right-click-mention]', err);
+    return false;
+  }
+}
+
 // 公式コマンドを呼ぶ。送れたら undefined、送れなかったらその理由を返す
 async function sendToClaude(): Promise<Reason | undefined> {
-  if (!vscode.extensions.getExtension(CLAUDE_EXT_ID)) return REASONS.noExtension;
+  if (!hasClaude()) return REASONS.noExtension;
   try {
     await vscode.commands.executeCommand(CLAUDE_CMD);
     return undefined;
@@ -134,6 +161,22 @@ async function sendFiles(clicked?: vscode.Uri, selected?: (vscode.Uri | undefine
     }
   }
 
+  if (!toCopy.length) return;
+
+  // フォルダ・テキストで開けないファイルだけなら（公式拡張は使える状態）、
+  // クリップボード経由でチャットの入力欄に貼り付けてみる
+  const pastable = hasClaude() && reasons.every((r) => r === REASONS.folder || r === REASONS.notText);
+  if (pastable) {
+    const text = toCopy.join(' ');
+    await vscode.env.clipboard.writeText(text);
+    if (await pasteIntoClaude()) {
+      void vscode.window.showInformationMessage(
+        `チャットに貼り付けました: ${text}（入っていなければ、チャット欄で Ctrl+V を押してください）`,
+      );
+      return;
+    }
+  }
+
   await copyReferences(toCopy, reasons);
 }
 
@@ -151,6 +194,8 @@ export function deactivate(): void {}
 export const _internal = {
   CLAUDE_EXT_ID,
   CLAUDE_CMD,
+  CLAUDE_FOCUS_CMD,
+  PASTE_CMD,
   REASONS,
   relPath,
   buildReference,

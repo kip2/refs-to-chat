@@ -114,6 +114,7 @@ describe('公式 Claude Code 拡張との互換性', () => {
     const { ext } = setup();
     const ids = claude.contributes.commands.map((c) => c.command);
     assert.ok(ids.includes(ext._internal.CLAUDE_CMD), `${ext._internal.CLAUDE_CMD} が ${dir} に無い`);
+    assert.ok(ids.includes(ext._internal.CLAUDE_FOCUS_CMD), `${ext._internal.CLAUDE_FOCUS_CMD} が ${dir} に無い`);
     // 拡張IDは大文字小文字を区別しない（公式は publisher が "Anthropic"）
     assert.equal(`${claude.publisher}.${claude.name}`.toLowerCase(), ext._internal.CLAUDE_EXT_ID.toLowerCase());
   });
