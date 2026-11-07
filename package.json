@@ -1,0 +1,86 @@
+{
+  "name": "claude-right-click",
+  "displayName": "Claude Right Click",
+  "description": "右クリックから選択範囲やファイルをClaude Codeのチャットに送る",
+  "version": "0.0.1",
+  "publisher": "kip2",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kip2/claude-right-click.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kip2/claude-right-click/issues"
+  },
+  "homepage": "https://github.com/kip2/claude-right-click#readme",
+  "engines": {
+    "vscode": "^1.94.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./extension.js",
+  "scripts": {
+    "test": "node test/run-unit.js",
+    "test:spec": "node test/run-unit.js --test-reporter=spec",
+    "test:integration": "node test/integration/runTest.js",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.9.2",
+    "mocha": "^10.8.2"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "claudeRightClick.sendSelection",
+        "title": "Claudeに選択範囲を送る"
+      },
+      {
+        "command": "claudeRightClick.sendCurrentFile",
+        "title": "Claudeにこのファイルを送る"
+      },
+      {
+        "command": "claudeRightClick.sendFile",
+        "title": "Claudeにファイルを送る"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "claudeRightClick.sendSelection",
+          "when": "editorHasSelection && !config.claudeCode.useTerminal",
+          "group": "navigation@100"
+        },
+        {
+          "command": "claudeRightClick.sendCurrentFile",
+          "when": "!editorHasSelection && !config.claudeCode.useTerminal",
+          "group": "navigation@100"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "claudeRightClick.sendFile",
+          "when": "!explorerResourceIsFolder && !config.claudeCode.useTerminal",
+          "group": "navigation@100"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "claudeRightClick.sendSelection",
+          "when": "!config.claudeCode.useTerminal"
+        },
+        {
+          "command": "claudeRightClick.sendCurrentFile",
+          "when": "!config.claudeCode.useTerminal"
+        },
+        {
+          "command": "claudeRightClick.sendFile",
+          "when": "false"
+        }
+      ]
+    }
+  }
+}
