@@ -1,4 +1,4 @@
-// Claude Right Click
+// Right Click Mention
 // 公式Claude Code拡張の「Insert @-Mention Reference」(Alt+K) を右クリックから呼ぶだけの拡張。
 // Claude Code拡張が無い・失敗した場合は @参照 をクリップボードにコピーする。
 // 対象はVS Codeのパネル版のみ（claudeCode.useTerminal = true のときはメニュー自体を出さない）。
@@ -39,7 +39,7 @@ async function insertMention(editor) {
   try {
     await vscode.commands.executeCommand(CLAUDE_CMD);
   } catch (err) {
-    console.error('[claude-right-click]', err);
+    console.error('[right-click-mention]', err);
     await fallbackCopy(editor, 'Claudeへの送信に失敗しました。');
   }
 }
@@ -77,9 +77,9 @@ async function sendFiles(clicked, selected) {
 
 function activate(context) {
   context.subscriptions.push(
-    vscode.commands.registerCommand('claudeRightClick.sendSelection', sendActiveEditor),
-    vscode.commands.registerCommand('claudeRightClick.sendCurrentFile', sendActiveEditor),
-    vscode.commands.registerCommand('claudeRightClick.sendFile', sendFiles),
+    vscode.commands.registerCommand('rightClickMention.sendSelection', sendActiveEditor),
+    vscode.commands.registerCommand('rightClickMention.sendCurrentFile', sendActiveEditor),
+    vscode.commands.registerCommand('rightClickMention.sendFile', sendFiles),
   );
 }
 

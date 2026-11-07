@@ -1,4 +1,4 @@
-# Claude Right Click
+# Right Click Mention
 
 右クリックメニューから、選択範囲やファイルを [Claude Code](https://www.anthropic.com/claude-code) の VS Code 拡張のチャットに `@src/app.ts#5-10` の形で送る、シンプルな VS Code 拡張です。
 
@@ -25,13 +25,13 @@
 
 Marketplace には出していません。VSIX ファイルからインストールします。
 
-1. [Releases](https://github.com/kip2/claude-right-click/releases) から `claude-right-click-<バージョン>.vsix` をダウンロードする
+1. [Releases](https://github.com/kip2/right-click-mention/releases) から `right-click-mention-<バージョン>.vsix` をダウンロードする
 2. VS Code の拡張機能ビューを開き、右上の「…」→「VSIX からのインストール…」でダウンロードしたファイルを選ぶ
 
 コマンドで入れることもできます。
 
 ```bash
-code --install-extension claude-right-click-<バージョン>.vsix
+code --install-extension right-click-mention-<バージョン>.vsix
 ```
 
 ## 注意

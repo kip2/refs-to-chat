@@ -6,8 +6,8 @@
 const assert = require('assert');
 const vscode = require('vscode');
 
-const EXT_ID = 'kip2.claude-right-click';
-const IDS = ['claudeRightClick.sendSelection', 'claudeRightClick.sendCurrentFile', 'claudeRightClick.sendFile'];
+const EXT_ID = 'kip2.right-click-mention';
+const IDS = ['rightClickMention.sendSelection', 'rightClickMention.sendCurrentFile', 'rightClickMention.sendFile'];
 
 function fileIn(folderName, rel) {
   const folder = vscode.workspace.workspaceFolders.find((f) => f.name === folderName);
@@ -24,7 +24,7 @@ async function openWithSelection(uri, sl, sc, el, ec) {
 
 const clipboard = () => vscode.env.clipboard.readText();
 
-describe('Claude Right Click（実VS Code・マルチルート）', function () {
+describe('Right Click Mention（実VS Code・マルチルート）', function () {
   before(async function () {
     const ext = vscode.extensions.getExtension(EXT_ID);
     assert.ok(ext, `${EXT_ID} が読み込まれていない`);
@@ -54,42 +54,42 @@ describe('Claude Right Click（実VS Code・マルチルート）', function () 
   describe('エディタからの送信', function () {
     it('alpha の複数行 → @alpha/src/app.js#2-4', async function () {
       await openWithSelection(fileIn('alpha', 'src/app.js'), 1, 0, 3, 5);
-      await vscode.commands.executeCommand('claudeRightClick.sendSelection');
+      await vscode.commands.executeCommand('rightClickMention.sendSelection');
       assert.strictEqual(await clipboard(), '@alpha/src/app.js#2-4');
     });
 
     it('同名の beta のファイル → @beta/src/app.js#2-4（取り違えない）', async function () {
       await openWithSelection(fileIn('beta', 'src/app.js'), 1, 0, 3, 5);
-      await vscode.commands.executeCommand('claudeRightClick.sendSelection');
+      await vscode.commands.executeCommand('rightClickMention.sendSelection');
       assert.strictEqual(await clipboard(), '@beta/src/app.js#2-4');
     });
 
     it('1行の一部 → #行', async function () {
       await openWithSelection(fileIn('alpha', 'src/app.js'), 2, 2, 2, 8);
-      await vscode.commands.executeCommand('claudeRightClick.sendSelection');
+      await vscode.commands.executeCommand('rightClickMention.sendSelection');
       assert.strictEqual(await clipboard(), '@alpha/src/app.js#3');
     });
 
     it('次行の先頭で終わる選択は最終行を含めない', async function () {
       await openWithSelection(fileIn('alpha', 'src/app.js'), 1, 0, 3, 0);
-      await vscode.commands.executeCommand('claudeRightClick.sendSelection');
+      await vscode.commands.executeCommand('rightClickMention.sendSelection');
       assert.strictEqual(await clipboard(), '@alpha/src/app.js#2-3');
     });
 
     it('下から上への選択でも同じ', async function () {
       await openWithSelection(fileIn('alpha', 'src/app.js'), 3, 5, 1, 0);
-      await vscode.commands.executeCommand('claudeRightClick.sendSelection');
+      await vscode.commands.executeCommand('rightClickMention.sendSelection');
       assert.strictEqual(await clipboard(), '@alpha/src/app.js#2-4');
     });
 
     it('選択なし → ファイルの参照', async function () {
       await openWithSelection(fileIn('beta', 'src/app.js'), 0, 0, 0, 0);
-      await vscode.commands.executeCommand('claudeRightClick.sendCurrentFile');
+      await vscode.commands.executeCommand('rightClickMention.sendCurrentFile');
       assert.strictEqual(await clipboard(), '@beta/src/app.js');
     });
 
     it('エディタが開いていない → 何もコピーしない', async function () {
-      await vscode.commands.executeCommand('claudeRightClick.sendSelection');
+      await vscode.commands.executeCommand('rightClickMention.sendSelection');
       assert.strictEqual(await clipboard(), '');
     });
   });
@@ -97,7 +97,7 @@ describe('Claude Right Click（実VS Code・マルチルート）', function () 
   describe('エクスプローラーからの送信', function () {
     it('1ファイル → 開いて選択なしで送る', async function () {
       const uri = fileIn('beta', 'src/only-in-beta.js');
-      await vscode.commands.executeCommand('claudeRightClick.sendFile', uri, [uri]);
+      await vscode.commands.executeCommand('rightClickMention.sendFile', uri, [uri]);
       assert.strictEqual(await clipboard(), '@beta/src/only-in-beta.js');
       const ed = vscode.window.activeTextEditor;
       assert.strictEqual(ed.document.uri.toString(), uri.toString());
@@ -108,21 +108,21 @@ describe('Claude Right Click（実VS Code・マルチルート）', function () 
       const uri = fileIn('alpha', 'src/app.js');
       await openWithSelection(uri, 1, 0, 3, 5);
       await vscode.commands.executeCommand('workbench.action.closeAllEditors');
-      await vscode.commands.executeCommand('claudeRightClick.sendFile', uri, [uri]);
+      await vscode.commands.executeCommand('rightClickMention.sendFile', uri, [uri]);
       assert.strictEqual(await clipboard(), '@alpha/src/app.js');
     });
 
     it('複数選択 → 順に処理し、最後のファイルが残る', async function () {
       const a = fileIn('alpha', 'src/app.js');
       const b = fileIn('beta', 'src/only-in-beta.js');
-      await vscode.commands.executeCommand('claudeRightClick.sendFile', a, [a, b]);
+      await vscode.commands.executeCommand('rightClickMention.sendFile', a, [a, b]);
       assert.strictEqual(await clipboard(), '@beta/src/only-in-beta.js');
       assert.strictEqual(vscode.window.activeTextEditor.document.uri.toString(), b.toString());
     });
 
     it('バイナリファイル → 開かずに @path をコピー', async function () {
       const uri = fileIn('alpha', 'binary.bin');
-      await vscode.commands.executeCommand('claudeRightClick.sendFile', uri, [uri]);
+      await vscode.commands.executeCommand('rightClickMention.sendFile', uri, [uri]);
       assert.strictEqual(await clipboard(), '@alpha/binary.bin');
     });
   });

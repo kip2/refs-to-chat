@@ -52,8 +52,8 @@ describe('メニューの表示条件', () => {
   const explorer = menus['explorer/context'];
 
   it('エディタ: 選択ありは sendSelection、なしは sendCurrentFile（排他）', () => {
-    const sel = editor.find((m) => m.command === 'claudeRightClick.sendSelection');
-    const cur = editor.find((m) => m.command === 'claudeRightClick.sendCurrentFile');
+    const sel = editor.find((m) => m.command === 'rightClickMention.sendSelection');
+    const cur = editor.find((m) => m.command === 'rightClickMention.sendCurrentFile');
     assert.match(sel.when, /(^|&& )editorHasSelection/);
     assert.match(cur.when, /!editorHasSelection/);
     assert.doesNotMatch(sel.when, /!editorHasSelection/);
@@ -69,7 +69,7 @@ describe('メニューの表示条件', () => {
   });
 
   it('sendFile は引数（URI）が必要なのでコマンドパレットに出さない', () => {
-    const p = menus.commandPalette.find((m) => m.command === 'claudeRightClick.sendFile');
+    const p = menus.commandPalette.find((m) => m.command === 'rightClickMention.sendFile');
     assert.equal(p.when, 'false');
   });
 

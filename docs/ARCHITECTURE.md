@@ -1,4 +1,4 @@
-# Claude Right Click — アーキテクチャ
+# Right Click Mention — アーキテクチャ
 
 右クリックメニューから、公式 Claude Code 拡張の「Insert @-Mention Reference」（Alt+K）を呼び出すだけの薄いラッパー拡張。
 自前でClaudeと通信はせず、**入口（メニュー）を足して、処理は公式拡張に委ねる**のが基本方針。
@@ -79,9 +79,9 @@ vsix はリポジトリに入れない。配るときは `npm run package` で�
 ```mermaid
 flowchart TB
   subgraph commands["contributes.commands"]
-    A["claudeRightClick.sendSelection"]
-    B["claudeRightClick.sendCurrentFile"]
-    C["claudeRightClick.sendFile"]
+    A["rightClickMention.sendSelection"]
+    B["rightClickMention.sendCurrentFile"]
+    C["rightClickMention.sendFile"]
   end
   subgraph menus["contributes.menus"]
     E1["editor/context<br/>when: editorHasSelection"] --> A
@@ -126,7 +126,7 @@ sequenceDiagram
   participant W as Claudeチャット
 
   U->>VS: 選択して右クリック →「Claudeに選択範囲を送る」
-  VS->>E: claudeRightClick.sendSelection
+  VS->>E: rightClickMention.sendSelection
   E->>E: activeTextEditor を取得
   E->>E: 公式拡張がインストール済みか確認
   E->>C: executeCommand('claude-vscode.insertAtMention')
@@ -144,7 +144,7 @@ sequenceDiagram
   participant C as 公式Claude拡張
 
   U->>VS: ファイルを右クリック（複数選択可）
-  VS->>E: claudeRightClick.sendFile(clicked, selected[])
+  VS->>E: rightClickMention.sendFile(clicked, selected[])
   loop 選択されたファイルごと
     E->>VS: openTextDocument + showTextDocument（選択は 0,0 で空）
     alt テキストとして開けた

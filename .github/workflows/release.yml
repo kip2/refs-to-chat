@@ -38,7 +38,7 @@ jobs:
         id: pack
         run: |
           version=$(node -p "require('./package.json').version")
-          file="claude-right-click-$version.vsix"
+          file="right-click-mention-$version.vsix"
           npx --yes @vscode/vsce@3.9.2 package --out "$file"
           echo "file=$file" >> "$GITHUB_OUTPUT"
 

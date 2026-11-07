@@ -1,6 +1,6 @@
 {
-  "name": "claude-right-click",
-  "displayName": "Claude Right Click",
+  "name": "right-click-mention",
+  "displayName": "Right Click Mention",
   "description": "右クリックから選択範囲やファイルをClaude Codeのチャットに送る",
   "version": "0.0.1",
   "publisher": "kip2",
@@ -8,12 +8,12 @@
   "private": true,
   "repository": {
     "type": "git",
-    "url": "https://github.com/kip2/claude-right-click.git"
+    "url": "https://github.com/kip2/right-click-mention.git"
   },
   "bugs": {
-    "url": "https://github.com/kip2/claude-right-click/issues"
+    "url": "https://github.com/kip2/right-click-mention/issues"
   },
-  "homepage": "https://github.com/kip2/claude-right-click#readme",
+  "homepage": "https://github.com/kip2/right-click-mention#readme",
   "engines": {
     "vscode": "^1.94.0"
   },
@@ -35,49 +35,49 @@
   "contributes": {
     "commands": [
       {
-        "command": "claudeRightClick.sendSelection",
+        "command": "rightClickMention.sendSelection",
         "title": "Claudeに選択範囲を送る"
       },
       {
-        "command": "claudeRightClick.sendCurrentFile",
+        "command": "rightClickMention.sendCurrentFile",
         "title": "Claudeにこのファイルを送る"
       },
       {
-        "command": "claudeRightClick.sendFile",
+        "command": "rightClickMention.sendFile",
         "title": "Claudeにファイルを送る"
       }
     ],
     "menus": {
       "editor/context": [
         {
-          "command": "claudeRightClick.sendSelection",
+          "command": "rightClickMention.sendSelection",
           "when": "editorHasSelection && !config.claudeCode.useTerminal",
           "group": "navigation@100"
         },
         {
-          "command": "claudeRightClick.sendCurrentFile",
+          "command": "rightClickMention.sendCurrentFile",
           "when": "!editorHasSelection && !config.claudeCode.useTerminal",
           "group": "navigation@100"
         }
       ],
       "explorer/context": [
         {
-          "command": "claudeRightClick.sendFile",
+          "command": "rightClickMention.sendFile",
           "when": "!explorerResourceIsFolder && !config.claudeCode.useTerminal",
           "group": "navigation@100"
         }
       ],
       "commandPalette": [
         {
-          "command": "claudeRightClick.sendSelection",
+          "command": "rightClickMention.sendSelection",
           "when": "!config.claudeCode.useTerminal"
         },
         {
-          "command": "claudeRightClick.sendCurrentFile",
+          "command": "rightClickMention.sendCurrentFile",
           "when": "!config.claudeCode.useTerminal"
         },
         {
-          "command": "claudeRightClick.sendFile",
+          "command": "rightClickMention.sendFile",
           "when": "false"
         }
       ]
