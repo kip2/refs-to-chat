@@ -42,7 +42,7 @@ jobs:
       - name: 依存を入れる（依存パッケージのインストールスクリプトは動かさない）
         run: npm ci --ignore-scripts
 
-      - name: ESLint
+      - name: リンター（Oxlint）
         run: npm run lint
 
       - name: ユニットテスト（先に TypeScript をコンパイルする）

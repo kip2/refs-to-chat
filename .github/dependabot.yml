@@ -23,7 +23,3 @@ updates:
     ignore:
       # engines.vscode（^1.94.0）と合わせるため、@types/vscode は手で上げる
       - dependency-name: '@types/vscode'
-      # typescript-eslint が TypeScript 6.0 までしか対応していないので、6.1 以上には上げない
-      # typescript-eslint が 7 に対応したら、この行を消す
-      - dependency-name: typescript
-        versions: ['>=6.1.0']

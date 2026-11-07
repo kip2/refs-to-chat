@@ -73,20 +73,20 @@ flowchart LR
 | `package.json` | 拡張のマニフェスト。コマンド3つと右クリックメニューを宣言 |
 | `src/` | 本体（→ 4章）。役目ごとにファイルを分けている |
 | `out/` | `src/` のコンパイル結果。`package.json` の `main` はここを指す。git には入れない |
-| `tsconfig.json` | TypeScript の設定（`strict` で型を厳しくチェック）。TypeScript 6 から `@types/*` が自動で読み込まれないので、`types` に node / mocha / vscode を書いている |
-| `eslint.config.mjs` | ESLint の設定（→ 9章） |
+| `tsconfig.json` | TypeScript（7）の設定（`strict` で型を厳しくチェック）。TypeScript 6 から `@types/*` が自動で読み込まれないので、`types` に node / mocha / vscode を書いている |
+| `.oxlintrc.json` | Oxlint（リンター）の設定（→ 9章） |
 | `.node-version` | 使う Node のバージョン（26）。CI の `setup-node` もここを読む |
 | `.vscode/launch.json` / `tasks.json` | `F5` でコンパイルしてから拡張開発ホストを起動する設定 |
-| `.vscode/extensions.json` | このフォルダを開くと、ESLint 拡張を入れるよう案内する |
+| `.vscode/extensions.json` | このフォルダを開くと、Oxlint 拡張（`oxc.oxc-vscode`）を入れるよう案内する |
 | `README.md` | 使い方（GitHub のトップに表示される） |
 | `docs/ARCHITECTURE.md` | このファイル |
 | `LICENSE` | MIT ライセンス |
 | `.vscodeignore` | vsix に入れないファイルの指定（`src/`・`docs/`・`out/test/` など。vsix に入るのは `out/*.js`・`package.json`・README・LICENSE） |
 | `.gitignore` | git に入れないファイルの指定（`node_modules/`・`out/`・`*.vsix` など） |
 | `.github/workflows/release.yml` | タグを push すると、テスト → vsix 作成 → Releases に添付（→ 9章） |
-| `.github/workflows/ci.yml` | PR と main への push で、`npm ci`・ESLint・ユニットテスト・vsix 作成を確かめる |
+| `.github/workflows/ci.yml` | PR と main への push で、`npm ci`・リンター（Oxlint）・ユニットテスト・vsix 作成を確かめる |
 | `CHANGELOG.md` | 変更履歴。リリースの説明文はここから作る |
-| `.github/dependabot.yml` | Action と devDependencies の更新を PR で知らせる。TypeScript は、typescript-eslint が対応している 6.0 までに止めている |
+| `.github/dependabot.yml` | Action と devDependencies の更新を PR で知らせる |
 | `.gitattributes` | 改行を LF にそろえる |
 | `src/test/` | テスト一式（→ 10章）。`out/test/` にコンパイルされるが、vsix には含めない |
 
@@ -300,7 +300,7 @@ F5   # npm run compile をしてから拡張開発ホストが起動する（.vs
 npm run compile   # src/ → out/
 npm run watch     # 保存のたびにコンパイル
 
-# ESLint
+# リンター（Oxlint）
 npm run lint      # await 忘れなどを調べる（CI でも実行する）
 
 # パッケージ化
@@ -311,14 +311,17 @@ npm run package   # = vsce package。直前に vscode:prepublish でコンパイ
 
 配布用の VSIX は GitHub Actions（`.github/workflows/release.yml`）が作る。`v*` のタグを push すると、`package` ジョブ（読み取り権限のみ）がテストと VSIX 作成を行い、`release` ジョブ（書き込み権限あり・依存は入れない）が Releases に添付する。リリースの説明文は `CHANGELOG.md` の該当バージョンの項目から作る（項目がなければ失敗する）。手順は README の「リリースの手順」を参照。
 
-PR と main への push では `.github/workflows/ci.yml` が `npm ci`・ESLint・ユニットテスト・vsix 作成を確かめる。Dependabot の PR もここで確かめられるので、壊れる更新は取り込む前に気づける（TypeScript 7 への更新で `npm ci` が失敗したことがきっかけ）。
+PR と main への push では `.github/workflows/ci.yml` が `npm ci`・リンター（Oxlint）・ユニットテスト・vsix 作成を確かめる。Dependabot の PR もここで確かめられるので、壊れる更新は取り込む前に気づける（TypeScript 7 への更新で `npm ci` が失敗したことがきっかけ）。
 
-ESLint（`eslint.config.mjs`）:
+リンター（Oxlint、`.oxlintrc.json`）:
 
-- `typescript-eslint` の型情報を使うおすすめ一式（`recommendedTypeChecked`）だけを使い、ルールは増やしすぎない。
-- いちばんの目的は、`await` し忘れた Promise を見つけること（`no-floating-promises`）。VS Code の API は `Promise` ではなく `Thenable` を返すので、`checkThenables: true` を付けている（付けないと見逃す）。わざと待たない通知には `void` を付ける。
+- TypeScript 7 に対応したリンターとして Oxlint を使う。型情報を使うルールは `oxlint-tsgolint`（TypeScript 7 の Go 版の上で動く）が担当する。
+  - 以前は ESLint ＋ typescript-eslint を使っていたが、typescript-eslint が TypeScript 7 に対応していない（7 には JS から使う API がまだない）ため入れ替えた。
+  - `oxlint-tsgolint` は決まった TypeScript のバージョンに合わせて作られているので、TypeScript を上げるときは一緒に上げる（Dependabot は devDependencies を 1 つの PR にまとめるので、同時に上がる）。
+- ルールは、まず間違いを見つける `correctness` の一式と、`await` 忘れを見つける `typescript/no-floating-promises` だけにして、増やしすぎない。
+- `no-floating-promises` には `checkThenables: true` を付けている。VS Code の API は `Promise` ではなく `Thenable` を返すので、付けないと見逃す（付けない状態で見逃すことを確かめた）。わざと待たない通知には `void` を付ける。
 - `node:test` の `describe` / `it` は Promise を返すが待たなくてよいので、このルールの対象から外している。
-- CI の `package` ジョブで、テストの前に `npm run lint` を実行する。
+- CI の `package` ジョブと `ci.yml` で、テストの前に `npm run lint` を実行する。
 
 安全のための設定:
 

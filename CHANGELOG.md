@@ -10,8 +10,8 @@ GitHub の Releases の説明文は、ここから作ります（リリースの
 ### 内部の変更
 
 - 開発用のツールを更新しました（Dependabot の提案を取り込みました）
-  - TypeScript 6.0、vsce 4、mocha 12、@vscode/test-electron 3、ESLint 10.14 など
-  - TypeScript は 7 も提案されましたが、ESLint の TypeScript 対応（typescript-eslint）がまだ 6.0 までなので、6.0 にしています
+  - TypeScript 7、vsce 4、mocha 12、@vscode/test-electron 3 など
+- リンターを ESLint から Oxlint に替えました（ESLint の TypeScript 対応が、まだ TypeScript 7 に対応していないため）
 - PR を出したときと main に push したときに、テストなどを自動で動かすようにしました（Dependabot の PR も、取り込む前に確かめられます）
 
 ## [0.0.4] - 2026-11-07

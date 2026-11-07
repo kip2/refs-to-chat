@@ -1,4 +1,4 @@
-# PR と main への push で、依存のインストール・ESLint・ユニットテストを動かす
+# PR と main への push で、依存のインストール・リンター（Oxlint）・ユニットテストを動かす
 # Dependabot の PR もここで確かめるので、壊れる更新は取り込む前に気づける
 name: CI
 
@@ -25,7 +25,7 @@ jobs:
       - name: 依存を入れる（依存パッケージのインストールスクリプトは動かさない）
         run: npm ci --ignore-scripts
 
-      - name: ESLint
+      - name: リンター（Oxlint）
         run: npm run lint
 
       - name: ユニットテスト（先に TypeScript をコンパイルする）

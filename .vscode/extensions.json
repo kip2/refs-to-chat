@@ -1,4 +1,4 @@
 {
   // このフォルダを開いたときに、入れておくとよい拡張として VS Code が案内する
-  "recommendations": ["dbaeumer.vscode-eslint"]
+  "recommendations": ["oxc.oxc-vscode"]
 }
