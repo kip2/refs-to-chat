@@ -62,7 +62,11 @@ export async function openForMention(
       finish: async () => {
         if (hadTab) {
           // チャットを開いたときに元のエディタが作り直されていることがあるので、今見えているものに戻す
-          const live = vscode.window.visibleTextEditors.find((e) => e.document === document) ?? editor;
+          // 同じファイルをほかのグループでも開いていることがあるので、開いたグループのものを選ぶ
+          const live =
+            vscode.window.visibleTextEditors.find(
+              (e) => e.document === document && e.viewColumn === group.viewColumn,
+            ) ?? editor;
           live.selections = original;
           return;
         }

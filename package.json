@@ -1,19 +1,19 @@
 {
-  "name": "right-click-mention",
-  "displayName": "Right Click Mention",
-  "description": "右クリックから選択範囲やファイルの参照を Claude Code のチャットに追加する（非公式）",
-  "version": "0.0.5",
+  "name": "refs-to-chat",
+  "displayName": "Refs to Chat",
+  "description": "右クリックから、選択範囲・ファイル・フォルダの参照（@ファイル#行）を Claude Code のチャットに追加する（非公式）",
+  "version": "0.1.0",
   "publisher": "kip2",
   "license": "MIT",
   "private": true,
   "repository": {
     "type": "git",
-    "url": "https://github.com/kip2/right-click-mention.git"
+    "url": "https://github.com/kip2/refs-to-chat.git"
   },
   "bugs": {
-    "url": "https://github.com/kip2/right-click-mention/issues"
+    "url": "https://github.com/kip2/refs-to-chat/issues"
   },
-  "homepage": "https://github.com/kip2/right-click-mention#readme",
+  "homepage": "https://github.com/kip2/refs-to-chat#readme",
   "engines": {
     "vscode": "^1.94.0"
   },
@@ -41,6 +41,10 @@
     "test:spec": "npm run build && node --test --test-reporter=spec \"out/test/unit/**/*.test.js\"",
     "pretest:integration": "npm run build",
     "test:integration": "node out/test/integration/runTest.js",
+    "pretest:e2e": "node -e \"require('fs').mkdirSync('.vscode-test/e2e', { recursive: true })\" && vsce package --out .vscode-test/e2e/refs-to-chat.vsix",
+    "test:e2e": "node out/test/e2e/run.js",
+    "pretest:e2e:setup": "npm run build",
+    "test:e2e:setup": "node out/test/e2e/setup.js",
     "vscode:prepublish": "npm run build",
     "package": "vsce package"
   },
@@ -53,76 +57,77 @@
     "mocha": "^12.0.3",
     "oxlint": "^1.89.0",
     "oxlint-tsgolint": "^7.0.2005",
+    "playwright-core": "1.64.1",
     "typescript": "^7.0.2"
   },
   "contributes": {
     "configuration": {
-      "title": "Right Click Mention",
+      "title": "Refs to Chat",
       "properties": {
-        "rightClickMention.explorerFiles": {
+        "refsToChat.explorerClipboard": {
           "type": "string",
           "enum": [
-            "paste",
-            "open"
+            "use",
+            "keep"
           ],
           "enumDescriptions": [
-            "ファイルを開かずに、参照をチャットの入力欄に貼り付ける。タブは開かない。クリップボードの中身は参照に置き換わる",
-            "ファイルを一瞬開いて、公式拡張のコマンドで入れる。クリップボードは変わらない。開いたタブは入れたあとで閉じる"
+            "クリップボードを使う。ファイルを開かずに入れる。クリップボードの中身は書き換わる",
+            "ファイルではクリップボードを使わない。かわりに、ファイルのタブが一瞬開いて閉じる"
           ],
-          "default": "paste",
+          "default": "use",
           "scope": "window",
-          "markdownDescription": "エクスプローラーから「Claudeのチャットに追加」したときの、ファイルの入れ方です。フォルダと、画像などテキストとして開けないファイルは、どちらの設定でも貼り付けで入れます。エディタの右クリックには関係ありません。"
+          "markdownDescription": "エクスプローラーから「Claudeのチャットに追加」したときに、クリップボードを使うかどうかを選びます。`keep` にしても、フォルダ、画像などテキストとして開けないファイル、チャットに追加できなかったときは、クリップボードを使います（元の中身は戻りません）。"
         }
       }
     },
     "commands": [
       {
-        "command": "rightClickMention.sendSelection",
+        "command": "refsToChat.sendSelection",
         "title": "選択範囲をClaudeのチャットに追加",
-        "category": "Right Click Mention"
+        "category": "Refs to Chat"
       },
       {
-        "command": "rightClickMention.sendCurrentFile",
+        "command": "refsToChat.sendCurrentFile",
         "title": "このファイルをClaudeのチャットに追加",
-        "category": "Right Click Mention"
+        "category": "Refs to Chat"
       },
       {
-        "command": "rightClickMention.sendFile",
+        "command": "refsToChat.sendFile",
         "title": "Claudeのチャットに追加",
-        "category": "Right Click Mention"
+        "category": "Refs to Chat"
       }
     ],
     "menus": {
       "editor/context": [
         {
-          "command": "rightClickMention.sendSelection",
+          "command": "refsToChat.sendSelection",
           "when": "editorHasSelection && !config.claudeCode.useTerminal",
           "group": "navigation@100"
         },
         {
-          "command": "rightClickMention.sendCurrentFile",
+          "command": "refsToChat.sendCurrentFile",
           "when": "!editorHasSelection && !config.claudeCode.useTerminal",
           "group": "navigation@100"
         }
       ],
       "explorer/context": [
         {
-          "command": "rightClickMention.sendFile",
+          "command": "refsToChat.sendFile",
           "when": "!config.claudeCode.useTerminal",
           "group": "navigation@100"
         }
       ],
       "commandPalette": [
         {
-          "command": "rightClickMention.sendSelection",
+          "command": "refsToChat.sendSelection",
           "when": "editorLangId && !config.claudeCode.useTerminal"
         },
         {
-          "command": "rightClickMention.sendCurrentFile",
+          "command": "refsToChat.sendCurrentFile",
           "when": "editorLangId && !config.claudeCode.useTerminal"
         },
         {
-          "command": "rightClickMention.sendFile",
+          "command": "refsToChat.sendFile",
           "when": "false"
         }
       ]

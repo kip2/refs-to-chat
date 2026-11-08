@@ -1,4 +1,4 @@
-// Right Click Mention: 右クリックから、選択範囲・ファイル・フォルダの参照を Claude のチャットに入れる
+// Refs to Chat: 右クリックから、選択範囲・ファイル・フォルダの参照を Claude のチャットに入れる
 // パネル版だけが対象（claudeCode.useTerminal = true のときはメニューを出さない）
 // 各ファイルの役目は docs/ARCHITECTURE.md の 4 章を参照
 

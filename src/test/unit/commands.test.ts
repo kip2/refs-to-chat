@@ -10,12 +10,12 @@ import { makeEditor, makeSelection, type MockOptions, setup, uri } from '../help
 const CMD = 'claude-vscode.insertAtMention';
 const FOCUS = 'claude-vscode.focus';
 const PASTE = 'editor.action.clipboardPasteAction';
-const IDS = ['rightClickMention.sendSelection', 'rightClickMention.sendCurrentFile', 'rightClickMention.sendFile'];
+const IDS = ['refsToChat.sendSelection', 'refsToChat.sendCurrentFile', 'refsToChat.sendFile'];
 
-// ファイルを一瞬開いて公式コマンドで入れる設定（open）で動かす
-// 初期設定は貼り付け（paste）なので、開く動きを確かめるテストはこれを使う
+// クリップボードを使わず、ファイルを一瞬開いて公式コマンドで入れる設定（keep）で動かす
+// 初期設定はクリップボードから貼り付ける（use）ので、開く動きを確かめるテストはこれを使う
 const setupOpen = (o: MockOptions = {}) =>
-  setup({ ...o, settings: { 'rightClickMention.explorerFiles': 'open', ...o.settings } });
+  setup({ ...o, settings: { 'refsToChat.explorerClipboard': 'keep', ...o.settings } });
 
 // 失敗時の console.error をテスト出力に出さない
 let origError: typeof console.error;
@@ -63,7 +63,7 @@ describe('activate / deactivate', () => {
 });
 
 describe('エディタからの送信（sendSelection / sendCurrentFile）', () => {
-  for (const id of ['rightClickMention.sendSelection', 'rightClickMention.sendCurrentFile']) {
+  for (const id of ['refsToChat.sendSelection', 'refsToChat.sendCurrentFile']) {
     it(`${id}: 公式コマンドを1回だけ呼ぶ`, async () => {
       const { vscode, state, run } = setup();
       vscode.window.activeTextEditor = makeEditor('/ws/project/a.js', makeSelection(1, 0, 3, 2));
@@ -76,7 +76,7 @@ describe('エディタからの送信（sendSelection / sendCurrentFile）', () 
 
   it('アクティブなエディタがない → 案内を出して何もしない', async () => {
     const { state, run } = setup();
-    await run('rightClickMention.sendSelection');
+    await run('refsToChat.sendSelection');
     assert.deepEqual(state.executed, []);
     assert.equal(state.clipboard, '');
     assert.equal(state.infos.length, 1);
@@ -85,7 +85,7 @@ describe('エディタからの送信（sendSelection / sendCurrentFile）', () 
   it('公式拡張がない → 公式コマンドは呼ばずクリップボードへ', async () => {
     const { vscode, state, run } = setup({ claudeInstalled: false });
     vscode.window.activeTextEditor = makeEditor('/ws/project/src/app.ts', makeSelection(4, 0, 9, 1));
-    await run('rightClickMention.sendSelection');
+    await run('refsToChat.sendSelection');
     assert.deepEqual(state.executed, []);
     assert.equal(state.clipboard, '@src/app.ts#5-10');
     assert.equal(state.warnings.length, 1);
@@ -97,7 +97,7 @@ describe('エディタからの送信（sendSelection / sendCurrentFile）', () 
   it('公式コマンドが失敗 → クリップボードへ（例外は外に出さない）', async () => {
     const { vscode, state, run } = setup({ onExecute: () => { throw new Error('command not found'); } });
     vscode.window.activeTextEditor = makeEditor('/ws/project/src/app.ts', makeSelection(0, 0, 0, 3));
-    await assert.doesNotReject(run('rightClickMention.sendSelection'));
+    await assert.doesNotReject(run('refsToChat.sendSelection'));
     assert.deepEqual(state.executed, [FOCUS, CMD]);
     assert.equal(state.clipboard, '@src/app.ts#1');
     assert.ok(state.warnings[0].includes(R.failed));
@@ -106,7 +106,7 @@ describe('エディタからの送信（sendSelection / sendCurrentFile）', () 
   it('入れる前にチャットを開く（エディタがまだ前面にあれば、前面に戻す処理はしない）', async () => {
     const { vscode, state, run } = setup();
     vscode.window.activeTextEditor = makeEditor('/ws/project/a.js', makeSelection(1, 0, 3, 2));
-    await run('rightClickMention.sendSelection');
+    await run('refsToChat.sendSelection');
     assert.deepEqual(state.log, [`cmd:${FOCUS}`, `cmd:${CMD}`]);
     assert.deepEqual(state.shown, []);
   });
@@ -115,7 +115,7 @@ describe('エディタからの送信（sendSelection / sendCurrentFile）', () 
     const sel = makeSelection(4, 0, 9, 1);
     const { vscode, state, run } = setup({ chatInEditorTab: true, chatColumn: 2 });
     vscode.window.activeTextEditor = makeEditor('/ws/project/a.js', sel);
-    await run('rightClickMention.sendSelection');
+    await run('refsToChat.sendSelection');
     assert.deepEqual(state.log, [`cmd:${FOCUS}`, 'show:/ws/project/a.js@1', `cmd:${CMD}`]);
     assert.equal(state.shown[0].options.viewColumn, 1);
     assert.equal(state.shown[0].options.preserveFocus, false);
@@ -125,7 +125,7 @@ describe('エディタからの送信（sendSelection / sendCurrentFile）', () 
   it('前面に戻せなくても、公式コマンドで入れることは試す（警告は出さない）', async () => {
     const { vscode, state, run } = setup({ chatInEditorTab: true, showFails: (p) => p === '/ws/project/a.js' });
     vscode.window.activeTextEditor = makeEditor('/ws/project/a.js');
-    await run('rightClickMention.sendCurrentFile');
+    await run('refsToChat.sendCurrentFile');
     assert.deepEqual(state.executed, [FOCUS, CMD]);
     assert.deepEqual(state.warnings, []);
   });
@@ -135,7 +135,7 @@ describe('エディタからの送信（sendSelection / sendCurrentFile）', () 
     const editor = makeEditor('/ws/project/note.ipynb');
     editor.document.uri.scheme = 'vscode-notebook-cell';
     vscode.window.activeTextEditor = editor;
-    await run('rightClickMention.sendCurrentFile');
+    await run('refsToChat.sendCurrentFile');
     assert.deepEqual(state.shown, []);
     assert.deepEqual(state.executed, [FOCUS, CMD]);
   });
@@ -145,7 +145,7 @@ describe('エディタからの送信（sendSelection / sendCurrentFile）', () 
     const editor = makeEditor('/ws/project/a.js');
     (editor as { viewColumn?: number }).viewColumn = undefined;
     vscode.window.activeTextEditor = editor;
-    await run('rightClickMention.sendCurrentFile');
+    await run('refsToChat.sendCurrentFile');
     assert.deepEqual(state.shown, []);
   });
 
@@ -161,7 +161,7 @@ describe('エディタからの送信（sendSelection / sendCurrentFile）', () 
     });
     ctx.vscode = vscode;
     vscode.window.activeTextEditor = makeEditor('/ws/project/a.js', makeSelection(4, 0, 9, 1));
-    await run('rightClickMention.sendSelection');
+    await run('refsToChat.sendSelection');
     assert.deepEqual(seen, [{ path: '/ws/project/a.js', line: 4, empty: false }]);
   });
 
@@ -172,7 +172,7 @@ describe('エディタからの送信（sendSelection / sendCurrentFile）', () 
       },
     });
     vscode.window.activeTextEditor = makeEditor('/ws/project/a.js');
-    await run('rightClickMention.sendCurrentFile');
+    await run('refsToChat.sendCurrentFile');
     assert.deepEqual(state.executed, [FOCUS, CMD]);
     assert.deepEqual(state.warnings, []);
   });
@@ -180,7 +180,7 @@ describe('エディタからの送信（sendSelection / sendCurrentFile）', () 
   it('マルチルートのフォールバックはフォルダ名付き', async () => {
     const { vscode, state, run } = setup({ claudeInstalled: false, workspaceFolders: ['/ws/alpha', '/ws/beta'] });
     vscode.window.activeTextEditor = makeEditor('/ws/beta/src/app.js', makeSelection(2, 0, 4, 1));
-    await run('rightClickMention.sendSelection');
+    await run('refsToChat.sendSelection');
     assert.equal(state.clipboard, '@beta/src/app.js#3-5');
   });
 });
@@ -199,7 +199,7 @@ describe('エクスプローラーからの送信（sendFile）', () => {
       },
     });
     ctx.vscode = vscode;
-    await run('rightClickMention.sendFile', A, undefined);
+    await run('refsToChat.sendFile', A, undefined);
     assert.deepEqual(state.opened, ['/ws/project/a.js']);
     assert.equal(state.shown.length, 1); // 開いたファイルがまだ前面にあるので、前面に戻す処理はしない
     const o = state.shown[0].options;
@@ -211,58 +211,57 @@ describe('エクスプローラーからの送信（sendFile）', () => {
 
   it('複数選択: 選択した順にすべて送る（右クリックしたファイルは重複させない）', async () => {
     const { state, run } = setupOpen();
-    await run('rightClickMention.sendFile', B, [A, B]);
+    await run('refsToChat.sendFile', B, [A, B]);
     assert.deepEqual(state.opened, ['/ws/project/a.js', '/ws/project/b.js']);
     assert.deepEqual(state.executed, [FOCUS, CMD, FOCUS, CMD]);
   });
 
   it('選択配列が空なら右クリックしたファイルを使う', async () => {
     const { state, run } = setupOpen();
-    await run('rightClickMention.sendFile', A, []);
+    await run('refsToChat.sendFile', A, []);
     assert.deepEqual(state.opened, ['/ws/project/a.js']);
   });
 
   it('引数が何もない（パレット等から）→ 何もしない', async () => {
     const { state, run } = setupOpen();
-    await run('rightClickMention.sendFile');
+    await run('refsToChat.sendFile');
     assert.deepEqual(state.opened, []);
     assert.deepEqual(state.executed, []);
   });
 
   it('配列に undefined が混ざっても無視する', async () => {
     const { state, run } = setupOpen();
-    await run('rightClickMention.sendFile', undefined, [undefined, A]);
+    await run('refsToChat.sendFile', undefined, [undefined, A]);
     assert.deepEqual(state.opened, ['/ws/project/a.js']);
   });
 
   it('テキストで開けないファイル → @path をコピーし、チャットに貼り付ける', async () => {
     const { state, run } = setupOpen({ isBinary: (p) => p.endsWith('.png') });
-    await run('rightClickMention.sendFile', IMG);
+    await run('refsToChat.sendFile', IMG);
     assert.deepEqual(state.executed, [FOCUS, PASTE]);
-    assert.equal(state.clipboard, '@logo.png');
+    assert.equal(state.clipboard, '@logo.png ');
     assert.deepEqual(state.warnings, []);
-    assert.equal(state.infos[0], MESSAGES.pasted(['@logo.png']));
+    assert.deepEqual(state.infos, []);
   });
 
   it('開けないファイルが混ざっても残りは送り、開けないものは最後に貼り付ける', async () => {
     const { state, run } = setupOpen({ isBinary: (p) => p.endsWith('.png') });
-    await run('rightClickMention.sendFile', A, [A, IMG, B]);
+    await run('refsToChat.sendFile', A, [A, IMG, B]);
     assert.deepEqual(state.executed, [FOCUS, CMD, FOCUS, CMD, FOCUS, PASTE]);
-    assert.deepEqual(state.clipboardWrites, ['@logo.png']);
+    assert.deepEqual(state.clipboardWrites, ['@logo.png ']);
   });
 
   it('開けたファイルで公式コマンドが失敗 →「追加できなかった」として扱い、「開けない」と取り違えない', async () => {
     const { state, run } = setupOpen({ onExecute: () => { throw new Error('boom'); } });
-    await run('rightClickMention.sendFile', A);
+    await run('refsToChat.sendFile', A);
     assert.deepEqual(state.clipboardWrites, ['@a.js']);
     assert.equal(state.warnings.length, 1);
     assert.ok(state.warnings[0].includes(R.failed));
-    assert.ok(!state.warnings[0].includes(R.notText));
   });
 
   it('公式拡張がない → すべての参照をまとめて 1 回でコピーし、警告も 1 回', async () => {
     const { state, run } = setupOpen({ claudeInstalled: false });
-    await run('rightClickMention.sendFile', A, [A, B]);
+    await run('refsToChat.sendFile', A, [A, B]);
     assert.deepEqual(state.clipboardWrites, ['@a.js @b.js']);
     assert.equal(state.warnings.length, 1);
     assert.ok(state.warnings[0].includes(R.notInstalled));
@@ -271,13 +270,12 @@ describe('エクスプローラーからの送信（sendFile）', () => {
   it('フォルダ → @src/ をコピーし、入力欄にフォーカスして貼り付ける（ファイルとしては開かない）', async () => {
     const SRC = uri('/ws/project/src');
     const { state, run } = setupOpen({ isFolder: (p) => p === '/ws/project/src' });
-    await run('rightClickMention.sendFile', SRC);
+    await run('refsToChat.sendFile', SRC);
     assert.deepEqual(state.opened, []);
     assert.deepEqual(state.executed, [FOCUS, PASTE]);
-    assert.deepEqual(state.clipboardWrites, ['@src/']);
+    assert.deepEqual(state.clipboardWrites, ['@src/ ']);
     assert.deepEqual(state.warnings, []);
-    assert.equal(state.infos.length, 1);
-    assert.match(state.infos[0], /@src\//);
+    assert.deepEqual(state.infos, []);
   });
 
   it('フォルダで貼り付けに失敗 → コピーしたまま警告を 1 回（貼り付けたとは言わない）', async () => {
@@ -286,10 +284,10 @@ describe('エクスプローラーからの送信（sendFile）', () => {
       isFolder: (p) => p === '/ws/project/src',
       onExecute: (id) => { if (id === FOCUS) throw new Error('no focus'); },
     });
-    await run('rightClickMention.sendFile', SRC);
+    await run('refsToChat.sendFile', SRC);
     assert.equal(state.clipboard, '@src/');
     assert.equal(state.warnings.length, 1);
-    assert.ok(state.warnings[0].includes(R.folder));
+    assert.ok(state.warnings[0].includes(R.pasteFailed));
     assert.deepEqual(state.infos, []);
   });
 
@@ -299,7 +297,7 @@ describe('エクスプローラーからの送信（sendFile）', () => {
       isFolder: (p) => p === '/ws/project/src',
       onExecute: (id) => { if (id === PASTE) throw new Error('paste failed'); },
     });
-    await run('rightClickMention.sendFile', SRC);
+    await run('refsToChat.sendFile', SRC);
     assert.deepEqual(state.executed, [FOCUS, PASTE]);
     assert.equal(state.clipboard, '@src/');
     assert.equal(state.warnings.length, 1);
@@ -309,7 +307,7 @@ describe('エクスプローラーからの送信（sendFile）', () => {
   it('公式拡張がないときは、フォルダでも貼り付けを試さず、拡張がないことを伝える', async () => {
     const SRC = uri('/ws/project/src');
     const { state, run } = setupOpen({ claudeInstalled: false, isFolder: (p) => p === '/ws/project/src' });
-    await run('rightClickMention.sendFile', SRC);
+    await run('refsToChat.sendFile', SRC);
     assert.deepEqual(state.executed, []);
     assert.deepEqual(state.clipboardWrites, ['@src/']);
     assert.equal(state.warnings.length, 1);
@@ -319,14 +317,14 @@ describe('エクスプローラーからの送信（sendFile）', () => {
   it('フォルダへのシンボリックリンクもフォルダとして扱う', async () => {
     const LINK = uri('/ws/project/linked');
     const { state, run } = setupOpen({ isSymlinkFolder: (p) => p === '/ws/project/linked' });
-    await run('rightClickMention.sendFile', LINK);
+    await run('refsToChat.sendFile', LINK);
     assert.deepEqual(state.opened, []);
-    assert.deepEqual(state.clipboardWrites, ['@linked/']);
+    assert.deepEqual(state.clipboardWrites, ['@linked/ ']);
   });
 
   it('フォルダか調べられない → ファイルとして開いて送る', async () => {
     const { state, run } = setupOpen({ statFails: (p) => p === '/ws/project/a.js' });
-    await run('rightClickMention.sendFile', A);
+    await run('refsToChat.sendFile', A);
     assert.deepEqual(state.opened, ['/ws/project/a.js']);
     assert.deepEqual(state.executed, [FOCUS, CMD]);
   });
@@ -337,32 +335,32 @@ describe('エクスプローラーからの送信（sendFile）', () => {
       isFolder: (p) => p === '/ws/project/src',
       showFails: (p) => p === '/ws/project/a.js',
     });
-    await assert.doesNotReject(run('rightClickMention.sendFile', A, [SRC, A, B]));
+    await assert.doesNotReject(run('refsToChat.sendFile', A, [SRC, A, B]));
     assert.deepEqual(state.executed, [FOCUS, CMD, FOCUS, PASTE]); // B は送り、src と a.js は貼り付け
-    assert.deepEqual(state.clipboardWrites, ['@src/ @a.js']);
+    assert.deepEqual(state.clipboardWrites, ['@src/ @a.js ']);
   });
 
-  it('同じ理由は 1 回だけ、最初に出た順で警告に書く', async () => {
+  it('同じ理由は 1 回だけ警告に書く', async () => {
     const SRC = uri('/ws/project/src');
     const DOCS = uri('/ws/project/docs');
     const { state, run } = setupOpen({
       claudeInstalled: false,
       isFolder: (p) => p === '/ws/project/src' || p === '/ws/project/docs',
     });
-    await run('rightClickMention.sendFile', SRC, [SRC, A, DOCS]);
+    await run('refsToChat.sendFile', SRC, [SRC, A, DOCS]);
     const reasons = state.warnings[0].split('。').slice(0, -1);
-    assert.deepEqual(reasons, [R.notInstalled, R.folder]);
+    assert.deepEqual(reasons, [R.notInstalled]);
   });
 
   it('ファイルとフォルダの混在 → ファイルは送り、フォルダだけまとめてコピー', async () => {
     const SRC = uri('/ws/project/src');
     const DOCS = uri('/ws/project/docs');
     const { state, run } = setupOpen({ isFolder: (p) => p === '/ws/project/src' || p === '/ws/project/docs' });
-    await run('rightClickMention.sendFile', A, [SRC, A, DOCS]);
+    await run('refsToChat.sendFile', A, [SRC, A, DOCS]);
     assert.deepEqual(state.opened, ['/ws/project/a.js']);
     assert.deepEqual(state.executed, [FOCUS, CMD, FOCUS, PASTE]);
-    assert.deepEqual(state.clipboardWrites, ['@src/ @docs/']);
-    assert.equal(state.infos.length, 1);
+    assert.deepEqual(state.clipboardWrites, ['@src/ @docs/ ']);
+    assert.deepEqual(state.infos, []);
   });
 
   it('理由が違うものが混ざっても、コピーも警告も 1 回で、理由は全部書く', async () => {
@@ -372,33 +370,42 @@ describe('エクスプローラーからの送信（sendFile）', () => {
       isFolder: (p) => p === '/ws/project/src',
       isBinary: (p) => p.endsWith('.png'),
     });
-    await run('rightClickMention.sendFile', A, [A, SRC, IMG]);
+    await run('refsToChat.sendFile', A, [A, SRC, IMG]);
     assert.deepEqual(state.clipboardWrites, ['@a.js @src/ @logo.png']);
     assert.equal(state.warnings.length, 1);
     assert.ok(state.warnings[0].includes(R.notInstalled));
-    assert.ok(state.warnings[0].includes(R.folder));
-    assert.ok(state.warnings[0].includes(R.notText));
   });
 
-  it('名前に改行などを含む参照は、貼り付けずにコピーだけする（貼り付けがターミナルに入ると危ない）', async () => {
+  // ターミナルなどに入ると、コマンドとして動きうるため
+  it('名前に改行などを含む参照は、貼り付けもコピーもせず、警告だけ出す', async () => {
     const ODD = uri('/ws/project/odd\nname');
     const { state, run } = setupOpen({ isFolder: (p) => p === '/ws/project/odd\nname' });
-    await run('rightClickMention.sendFile', ODD);
+    await run('refsToChat.sendFile', ODD);
     assert.deepEqual(state.executed, []); // フォーカスも貼り付けも呼ばない
-    assert.deepEqual(state.clipboardWrites, ['@odd\nname/']);
-    assert.equal(state.warnings.length, 1);
+    assert.deepEqual(state.clipboardWrites, []);
+    assert.deepEqual(state.warnings, [MESSAGES.unsafeName(1)]);
+  });
+
+  it('名前に改行などを含むものが混ざっても、ほかのものは貼り付けで入れる', async () => {
+    const ODD = uri('/ws/project/odd\nname');
+    const SRC = uri('/ws/project/src');
+    const { state, run } = setup({ isFolder: (p) => p === '/ws/project/src' });
+    await run('refsToChat.sendFile', A, [A, ODD, SRC]);
+    assert.deepEqual(state.executed, [FOCUS, PASTE]);
+    assert.deepEqual(state.clipboardWrites, ['@a.js @src/ ']);
+    assert.deepEqual(state.warnings, [MESSAGES.unsafeName(1)]);
   });
 
   it('すべてチャットに送れたら、クリップボードには触らない', async () => {
     const { state, run } = setupOpen();
-    await run('rightClickMention.sendFile', A, [A, B]);
+    await run('refsToChat.sendFile', A, [A, B]);
     assert.deepEqual(state.clipboardWrites, []);
     assert.deepEqual(state.warnings, []);
   });
 
   it('マルチルートの別フォルダのファイル', async () => {
     const { state, run } = setupOpen({ claudeInstalled: false, workspaceFolders: ['/ws/alpha', '/ws/beta'] });
-    await run('rightClickMention.sendFile', uri('/ws/beta/src/only-in-beta.js'));
+    await run('refsToChat.sendFile', uri('/ws/beta/src/only-in-beta.js'));
     assert.equal(state.clipboard, '@beta/src/only-in-beta.js');
   });
 });
@@ -410,7 +417,7 @@ describe('エクスプローラーから送るときに開いたタブ', () => {
 
   it('参照を作るために開いたタブは、チャットに入れたあとで閉じる', async () => {
     const { state, run } = setupOpen();
-    await run('rightClickMention.sendFile', A);
+    await run('refsToChat.sendFile', A);
     assert.deepEqual(state.executed, [FOCUS, CMD]);
     assert.deepEqual(state.closed, ['/ws/project/a.js']);
     assert.deepEqual(state.tabs, []);
@@ -425,14 +432,14 @@ describe('エクスプローラーから送るときに開いたタブ', () => {
       },
     });
     ctx.state = state;
-    await run('rightClickMention.sendFile', A);
+    await run('refsToChat.sendFile', A);
     assert.deepEqual(tabsAtInsert, [['/ws/project/a.js']]);
     assert.deepEqual(state.tabs, []);
   });
 
   it('もともと開いていたファイルのタブは閉じない', async () => {
     const { state, run } = setupOpen({ openTabs: ['/ws/project/a.js'] });
-    await run('rightClickMention.sendFile', A, [A, B]);
+    await run('refsToChat.sendFile', A, [A, B]);
     assert.deepEqual(state.executed, [FOCUS, CMD, FOCUS, CMD]);
     assert.deepEqual(state.closed, ['/ws/project/b.js']);
     assert.deepEqual(tabPaths(state.tabs), ['/ws/project/a.js']);
@@ -440,14 +447,14 @@ describe('エクスプローラーから送るときに開いたタブ', () => {
 
   it('公式拡張が無くてコピーに回ったときも、開いたタブは閉じる', async () => {
     const { state, run } = setupOpen({ claudeInstalled: false });
-    await run('rightClickMention.sendFile', A, [A, B]);
+    await run('refsToChat.sendFile', A, [A, B]);
     assert.deepEqual(state.clipboardWrites, ['@a.js @b.js']);
     assert.deepEqual(state.tabs, []);
   });
 
   it('タブを閉じられなくても、残りのファイルは送る（タブは残り、通知もコピーもしない）', async () => {
     const { state, run } = setupOpen({ closeFails: true });
-    await assert.doesNotReject(run('rightClickMention.sendFile', A, [A, B]));
+    await assert.doesNotReject(run('refsToChat.sendFile', A, [A, B]));
     assert.deepEqual(state.executed, [FOCUS, CMD, FOCUS, CMD]);
     assert.deepEqual(state.closed, []);
     assert.deepEqual(tabPaths(state.tabs), ['/ws/project/a.js', '/ws/project/b.js']);
@@ -457,13 +464,13 @@ describe('エクスプローラーから送るときに開いたタブ', () => {
 
   it('タブを閉じるときは、フォーカスを今の場所に保つ', async () => {
     const { state, run } = setupOpen();
-    await run('rightClickMention.sendFile', A);
+    await run('refsToChat.sendFile', A);
     assert.deepEqual(state.closePreserveFocus, [true]);
   });
 
   it('別のエディタグループにだけ開いていたファイルは、今のグループにできたタブを閉じる', async () => {
     const { state, run } = setupOpen({ otherGroupTabs: ['/ws/project/a.js'] });
-    await run('rightClickMention.sendFile', A);
+    await run('refsToChat.sendFile', A);
     assert.deepEqual(state.tabs, []);
     assert.deepEqual(tabPaths(state.otherTabs), ['/ws/project/a.js']);
   });
@@ -474,7 +481,7 @@ describe('エクスプローラーから送るときに開いたタブ', () => {
       openTabs: ['/ws/project/App.ts'],
       documentPath: (p) => (p.toLowerCase() === '/ws/project/app.ts' ? '/ws/project/App.ts' : p),
     });
-    await run('rightClickMention.sendFile', uri('/ws/project/app.ts'));
+    await run('refsToChat.sendFile', uri('/ws/project/app.ts'));
     assert.deepEqual(state.closed, []);
     assert.deepEqual(tabPaths(state.tabs), ['/ws/project/App.ts']);
   });
@@ -489,7 +496,7 @@ describe('エクスプローラーから送るときに開いたタブ', () => {
       },
     });
     ctx.vscode = vscode;
-    await run('rightClickMention.sendFile', A, [A, B]);
+    await run('refsToChat.sendFile', A, [A, B]);
     assert.deepEqual(seen, ['/ws/project/a.js', '/ws/project/b.js']);
     assert.deepEqual(state.tabs, []);
   });
@@ -497,7 +504,7 @@ describe('エクスプローラーから送るときに開いたタブ', () => {
   it('もともと開いていたファイルは、送ったあとで選択（カーソル位置）を元に戻す', async () => {
     const sel = makeSelection(4, 2, 9, 7);
     const { state, run } = setupOpen({ openTabs: ['/ws/project/a.js'], selections: { '/ws/project/a.js': sel } });
-    await run('rightClickMention.sendFile', A);
+    await run('refsToChat.sendFile', A);
     const editor = state.editors.get('/ws/project/a.js');
     assert.ok(editor);
     assert.deepEqual(editor.selections, [sel]);
@@ -515,7 +522,7 @@ describe('エクスプローラーから送るときに開いたタブ', () => {
       },
     });
     ctx.vscode = vscode;
-    await run('rightClickMention.sendFile', A);
+    await run('refsToChat.sendFile', A);
     assert.deepEqual(seen, [{ empty: true, line: 9 }]);
   });
 
@@ -527,7 +534,7 @@ describe('エクスプローラーから送るときに開いたタブ', () => {
       isFolder: (p) => p === '/ws/project/src',
       isBinary: (p) => p.endsWith('.png'),
     });
-    await run('rightClickMention.sendFile', SRC, [SRC, IMG]);
+    await run('refsToChat.sendFile', SRC, [SRC, IMG]);
     assert.deepEqual(state.closed, []);
     assert.deepEqual(tabPaths(state.tabs), ['/ws/project/other.js']);
   });
@@ -535,35 +542,35 @@ describe('エクスプローラーから送るときに開いたタブ', () => {
   it('エディタの右クリックでは、タブを閉じない', async () => {
     const { vscode, state, run } = setupOpen({ openTabs: ['/ws/project/a.js'] });
     vscode.window.activeTextEditor = makeEditor('/ws/project/a.js', makeSelection(1, 0, 3, 2));
-    await run('rightClickMention.sendSelection');
+    await run('refsToChat.sendSelection');
     assert.deepEqual(state.closed, []);
   });
 });
 
-describe('エクスプローラーから送るファイル（貼り付けの設定・初期設定）', () => {
+describe('エクスプローラーから送るファイル（設定 use・初期設定）', () => {
   const A = uri('/ws/project/a.js');
   const B = uri('/ws/project/b.js');
 
   it('初期設定では、ファイルを開かずに貼り付けで入れる', async () => {
     const { state, run } = setup();
-    await run('rightClickMention.sendFile', A);
+    await run('refsToChat.sendFile', A);
     assert.deepEqual(state.opened, []);
     assert.deepEqual(state.shown, []);
     assert.deepEqual(state.executed, [FOCUS, PASTE]);
-    assert.deepEqual(state.clipboardWrites, ['@a.js']);
-    assert.equal(state.infos[0], MESSAGES.pasted(['@a.js']));
+    assert.deepEqual(state.clipboardWrites, ['@a.js ']);
+    assert.deepEqual(state.infos, []);
   });
 
-  it('設定に paste と書いても同じ', async () => {
-    const { state, run } = setup({ settings: { 'rightClickMention.explorerFiles': 'paste' } });
-    await run('rightClickMention.sendFile', A);
+  it('設定に use と書いても同じ', async () => {
+    const { state, run } = setup({ settings: { 'refsToChat.explorerClipboard': 'use' } });
+    await run('refsToChat.sendFile', A);
     assert.deepEqual(state.opened, []);
     assert.deepEqual(state.executed, [FOCUS, PASTE]);
   });
 
   it('知らない値が設定されていたら、初期設定の貼り付けとして扱う', async () => {
-    const { state, run } = setup({ settings: { 'rightClickMention.explorerFiles': 'unknown' } });
-    await run('rightClickMention.sendFile', A);
+    const { state, run } = setup({ settings: { 'refsToChat.explorerClipboard': 'unknown' } });
+    await run('refsToChat.sendFile', A);
     assert.deepEqual(state.opened, []);
     assert.deepEqual(state.executed, [FOCUS, PASTE]);
   });
@@ -571,16 +578,16 @@ describe('エクスプローラーから送るファイル（貼り付けの設�
   it('複数のファイルとフォルダは、選んだ順にまとめて 1 回で貼り付ける', async () => {
     const SRC = uri('/ws/project/src');
     const { state, run } = setup({ isFolder: (p) => p === '/ws/project/src' });
-    await run('rightClickMention.sendFile', A, [A, SRC, B]);
+    await run('refsToChat.sendFile', A, [A, SRC, B]);
     assert.deepEqual(state.opened, []);
     assert.deepEqual(state.executed, [FOCUS, PASTE]);
-    assert.deepEqual(state.clipboardWrites, ['@a.js @src/ @b.js']);
-    assert.equal(state.infos.length, 1);
+    assert.deepEqual(state.clipboardWrites, ['@a.js @src/ @b.js ']);
+    assert.deepEqual(state.infos, []);
   });
 
   it('タブには触らない（開きも閉じもしない）', async () => {
     const { state, run } = setup({ openTabs: ['/ws/project/a.js'] });
-    await run('rightClickMention.sendFile', A, [A, B]);
+    await run('refsToChat.sendFile', A, [A, B]);
     assert.deepEqual(state.closed, []);
     assert.deepEqual(state.shown, []);
   });
@@ -588,9 +595,9 @@ describe('エクスプローラーから送るファイル（貼り付けの設�
   it('画像などのファイルも、開こうとせずに貼り付ける', async () => {
     const IMG = uri('/ws/project/logo.png');
     const { state, run } = setup({ isBinary: (p) => p.endsWith('.png') });
-    await run('rightClickMention.sendFile', IMG);
+    await run('refsToChat.sendFile', IMG);
     assert.deepEqual(state.opened, []);
-    assert.deepEqual(state.clipboardWrites, ['@logo.png']);
+    assert.deepEqual(state.clipboardWrites, ['@logo.png ']);
     assert.deepEqual(state.executed, [FOCUS, PASTE]);
   });
 
@@ -600,34 +607,80 @@ describe('エクスプローラーから送るファイル（貼り付けの設�
         if (id === PASTE) throw new Error('paste failed');
       },
     });
-    await run('rightClickMention.sendFile', A);
+    await run('refsToChat.sendFile', A);
     assert.equal(state.clipboard, '@a.js');
     assert.equal(state.warnings.length, 1);
-    assert.ok(state.warnings[0].includes(R.pasteFile));
+    assert.ok(state.warnings[0].includes(R.pasteFailed));
     assert.deepEqual(state.infos, []);
   });
 
   it('公式拡張がないときは、貼り付けずにコピーし、拡張がないことを伝える', async () => {
     const { state, run } = setup({ claudeInstalled: false });
-    await run('rightClickMention.sendFile', A, [A, B]);
+    await run('refsToChat.sendFile', A, [A, B]);
     assert.deepEqual(state.executed, []);
     assert.deepEqual(state.clipboardWrites, ['@a.js @b.js']);
     assert.ok(state.warnings[0].includes(R.notInstalled));
   });
 
-  it('名前に改行を含むファイルは、貼り付けずにコピーだけする', async () => {
+  it('名前に改行を含むファイルは、貼り付けもコピーもしない', async () => {
     const ODD = uri('/ws/project/odd\nname.js');
     const { state, run } = setup();
-    await run('rightClickMention.sendFile', ODD);
+    await run('refsToChat.sendFile', ODD);
     assert.deepEqual(state.executed, []);
-    assert.deepEqual(state.clipboardWrites, ['@odd\nname.js']);
-    assert.equal(state.warnings.length, 1);
+    assert.deepEqual(state.clipboardWrites, []);
+    assert.deepEqual(state.warnings, [MESSAGES.unsafeName(1)]);
+  });
+
+  describe('フォーカスが移らず、ファイルに貼り付けてしまったとき', () => {
+    const withEditor = (o: MockOptions) => {
+      const env = setup(o);
+      env.vscode.window.activeTextEditor = makeEditor('/ws/project/open.js');
+      return env;
+    };
+
+    it('前面のエディタのファイルに入ったら、取り消してコピーと警告に切り替える', async () => {
+      const { state, run } = withEditor({ pasteIntoFile: 'active' });
+      await run('refsToChat.sendFile', A);
+      assert.deepEqual(state.executed, [FOCUS, PASTE, 'undo']);
+      assert.equal(state.clipboard, '@a.js');
+      assert.equal(state.warnings.length, 1);
+      assert.ok(state.warnings[0].includes(R.pasteFailed));
+    });
+
+    it('前面ではないファイルに入ったら、取り消さずに知らせる（ほかの操作を取り消さないため）', async () => {
+      const { state, run } = withEditor({ pasteIntoFile: 'other' });
+      await run('refsToChat.sendFile', A);
+      assert.deepEqual(state.executed, [FOCUS, PASTE]);
+      assert.equal(state.warnings.length, 1);
+      assert.ok(state.warnings[0].includes(R.leftInFile));
+    });
+
+    it('入ったあとにファイルがほかにも変わっていたら、取り消さずに知らせる', async () => {
+      const { state, run } = withEditor({ pasteIntoFile: 'activeThenEdited' });
+      await run('refsToChat.sendFile', A);
+      assert.deepEqual(state.executed, [FOCUS, PASTE]);
+      assert.ok(state.warnings[0].includes(R.leftInFile));
+    });
+
+    it('undo しても取り消せなかったら、知らせる', async () => {
+      const { state, run } = withEditor({ pasteIntoFile: 'active', undoDoesNothing: true });
+      await run('refsToChat.sendFile', A);
+      assert.deepEqual(state.executed, [FOCUS, PASTE, 'undo']);
+      assert.ok(state.warnings[0].includes(R.leftInFile));
+    });
+
+    it('前面にエディタがないときは、取り消さずに知らせる', async () => {
+      const { state, run } = setup({ pasteIntoFile: 'active' });
+      await run('refsToChat.sendFile', A);
+      assert.deepEqual(state.executed, [FOCUS, PASTE]);
+      assert.ok(state.warnings[0].includes(R.leftInFile));
+    });
   });
 
   it('エディタの右クリックは、設定に関係なく公式コマンドで入れる', async () => {
-    const { vscode, state, run } = setup({ settings: { 'rightClickMention.explorerFiles': 'paste' } });
+    const { vscode, state, run } = setup({ settings: { 'refsToChat.explorerClipboard': 'use' } });
     vscode.window.activeTextEditor = makeEditor('/ws/project/a.js', makeSelection(1, 0, 3, 2));
-    await run('rightClickMention.sendSelection');
+    await run('refsToChat.sendSelection');
     assert.deepEqual(state.executed, [FOCUS, CMD]);
     assert.deepEqual(state.clipboardWrites, []);
   });
@@ -639,37 +692,43 @@ describe('エクスプローラーから送るときの細かい動き', () => {
 
   it('送るものが何もないときは、そう知らせる', async () => {
     const { state, run } = setup();
-    await run('rightClickMention.sendFile', undefined, []);
+    await run('refsToChat.sendFile', undefined, []);
     assert.deepEqual(state.infos, [MESSAGES.noTarget]);
     assert.deepEqual(state.executed, []);
   });
 
-  it('貼り付けの通知は、参照が 4 つ以上なら件数だけにする', async () => {
-    const files = ['a', 'b', 'c', 'd', 'e'].map((n) => uri(`/ws/project/${n}.js`));
-    const { state, run } = setup();
-    await run('rightClickMention.sendFile', files[0], files);
-    assert.equal(state.infos[0], MESSAGES.pasted(['@a.js', '@b.js', '@c.js', '@d.js', '@e.js']));
-    assert.ok(state.infos[0].includes('5 件'));
-    assert.deepEqual(state.clipboardWrites, ['@a.js @b.js @c.js @d.js @e.js']);
+  // 本当に入ったかは分からないので、うまくいったように見えても通知は出さない
+  // 続けて貼り付けたときに、前の参照とくっついて 1 つの参照に見えないようにする
+  it('貼り付けるときは末尾に空白を付ける。コピーだけのときは付けない', async () => {
+    const pasted = setup();
+    await pasted.run('refsToChat.sendFile', A, [A, B]);
+    assert.deepEqual(pasted.state.clipboardWrites, ['@a.js @b.js ']);
+
+    const copied = setup({ claudeInstalled: false });
+    await copied.run('refsToChat.sendFile', A, [A, B]);
+    assert.deepEqual(copied.state.clipboardWrites, ['@a.js @b.js']);
   });
 
-  it('貼り付けの通知は、参照が 3 つまでなら並べる', async () => {
+  it('貼り付けたときは、通知を出さない', async () => {
     const { state, run } = setup();
-    await run('rightClickMention.sendFile', A, [A, B]);
-    assert.ok(state.infos[0].includes('@a.js @b.js'));
+    await run('refsToChat.sendFile', A, [A, B]);
+    assert.deepEqual(state.executed, [FOCUS, PASTE]);
+    assert.deepEqual(state.infos, []);
+    assert.deepEqual(state.warnings, []);
   });
 
-  it('文字の向きを変える見えない文字を含む名前は、貼り付けずにコピーだけする', async () => {
+  it('文字の向きを変える見えない文字を含む名前は、貼り付けもコピーもしない', async () => {
     const ODD = uri('/ws/project/abc‮js.txt');
     const { state, run } = setup();
-    await run('rightClickMention.sendFile', ODD);
+    await run('refsToChat.sendFile', ODD);
     assert.deepEqual(state.executed, []);
-    assert.equal(state.warnings.length, 1);
+    assert.deepEqual(state.clipboardWrites, []);
+    assert.deepEqual(state.warnings, [MESSAGES.unsafeName(1)]);
   });
 
-  it('設定 open で複数送るとき、チャットのグループではなく、最初に選んでいたグループに開く', async () => {
+  it('設定 keep で複数送るとき、チャットのグループではなく、最初に選んでいたグループに開く', async () => {
     const { state, run } = setupOpen({ chatInEditorTab: true, chatColumn: 2 });
-    await run('rightClickMention.sendFile', A, [A, B]);
+    await run('refsToChat.sendFile', A, [A, B]);
     assert.deepEqual(
       state.shown.filter((s) => s.options.preview === false).map((s) => s.options.viewColumn),
       [1, 1],
@@ -679,15 +738,105 @@ describe('エクスプローラーから送るときの細かい動き', () => {
   });
 
   it('設定は送り始めに 1 回だけ読み、途中で変わっても最後まで同じ入れ方で送る', async () => {
-    const settings: Record<string, unknown> = { 'rightClickMention.explorerFiles': 'open' };
+    const settings: Record<string, unknown> = { 'refsToChat.explorerClipboard': 'keep' };
     const { state, run } = setup({
       settings,
       onExecute: (id) => {
-        if (id === CMD) settings['rightClickMention.explorerFiles'] = 'paste';
+        if (id === CMD) settings['refsToChat.explorerClipboard'] = 'use';
       },
     });
-    await run('rightClickMention.sendFile', A, [A, B]);
+    await run('refsToChat.sendFile', A, [A, B]);
     assert.deepEqual(state.opened, ['/ws/project/a.js', '/ws/project/b.js']);
     assert.deepEqual(state.clipboardWrites, []);
+  });
+});
+
+// WSL・SSH・Dev Containers では、公式拡張がリモート側にあり、手元の PC で動くこの拡張からは見えない
+// それでもコマンドは呼べるので、見えなくても呼んでみる
+describe('Remote（公式拡張がリモート側にある）', () => {
+  const A = uri('/ws/project/a.js');
+  const SRC = uri('/ws/project/src');
+  const REMOTE: MockOptions = { remoteName: 'wsl', claudeInRemote: true };
+  const REMOTE_NO_CLAUDE: MockOptions = { remoteName: 'wsl', claudeInstalled: false };
+
+  it('エディタ: 見えなくても公式コマンドを呼んで入れる', async () => {
+    const { vscode, state, run } = setup(REMOTE);
+    vscode.window.activeTextEditor = makeEditor('/ws/project/src/app.ts', makeSelection(4, 0, 9, 1));
+    await run('refsToChat.sendSelection');
+    assert.deepEqual(state.executed, [FOCUS, CMD]);
+    assert.deepEqual(state.clipboardWrites, []);
+    assert.deepEqual(state.warnings, []);
+  });
+
+  it('エクスプローラー（貼り付け・初期設定）: ファイルとフォルダを貼り付けで入れる', async () => {
+    const { state, run } = setup({ ...REMOTE, isFolder: (p) => p === '/ws/project/src' });
+    await run('refsToChat.sendFile', A, [A, SRC]);
+    assert.deepEqual(state.executed, [FOCUS, PASTE]);
+    assert.deepEqual(state.clipboardWrites, ['@a.js @src/ ']);
+    assert.deepEqual(state.infos, []);
+    assert.deepEqual(state.warnings, []);
+  });
+
+  it('エクスプローラー（設定 keep）: ファイルを開いて公式コマンドで入れる', async () => {
+    const { state, run } = setupOpen(REMOTE);
+    await run('refsToChat.sendFile', A);
+    assert.deepEqual(state.opened, ['/ws/project/a.js']);
+    assert.deepEqual(state.executed, [FOCUS, CMD]);
+    assert.deepEqual(state.warnings, []);
+  });
+
+  it('公式拡張がどこにもない（エディタ）→ 呼んでみて、見つからないと警告してコピーする', async () => {
+    const { vscode, state, run } = setup(REMOTE_NO_CLAUDE);
+    vscode.window.activeTextEditor = makeEditor('/ws/project/src/app.ts', makeSelection(4, 0, 9, 1));
+    await run('refsToChat.sendSelection');
+    assert.deepEqual(state.executed, [FOCUS, CMD]);
+    assert.equal(state.clipboard, '@src/app.ts#5-10');
+    assert.equal(state.warnings.length, 1);
+    assert.ok(state.warnings[0].includes(R.notInstalled));
+  });
+
+  it('公式拡張がどこにもない（エクスプローラー）→ 見つからないと警告してコピーする', async () => {
+    const { state, run } = setup({ ...REMOTE_NO_CLAUDE, isFolder: (p) => p === '/ws/project/src' });
+    await run('refsToChat.sendFile', A, [A, SRC]);
+    // 一度貼り付けを試してから、コピーに切り替える
+    assert.deepEqual(state.executed, [FOCUS]);
+    assert.deepEqual(state.clipboardWrites, ['@a.js @src/ ', '@a.js @src/']);
+    assert.equal(state.infos.length, 0);
+    assert.equal(state.warnings.length, 1);
+    assert.ok(state.warnings[0].includes(R.notInstalled));
+  });
+
+  it('公式拡張はあるが公式コマンドが失敗 →「見つからない」ではなく「追加できなかった」と伝える', async () => {
+    const { vscode, state, run } = setup({
+      ...REMOTE,
+      onExecute: (id) => { if (id === CMD) throw new Error('boom'); },
+    });
+    vscode.window.activeTextEditor = makeEditor('/ws/project/src/app.ts', makeSelection(4, 0, 9, 1));
+    await run('refsToChat.sendSelection');
+    assert.equal(state.warnings.length, 1);
+    assert.ok(state.warnings[0].includes(R.failed));
+    assert.ok(!state.warnings[0].includes(R.notInstalled));
+  });
+
+  it('公式拡張がどこにもない（設定 keep、ファイルとフォルダ）→ まとめて 1 回コピーし、理由は 1 回だけ書く', async () => {
+    const { state, run } = setupOpen({ ...REMOTE_NO_CLAUDE, isFolder: (p) => p === '/ws/project/src' });
+    await run('refsToChat.sendFile', A, [A, SRC]);
+    assert.deepEqual(state.clipboardWrites, ['@a.js @src/']);
+    assert.equal(state.warnings.length, 1);
+    assert.deepEqual(state.warnings[0].split('。').slice(0, -1), [R.notInstalled]);
+  });
+
+  it('公式コマンドが失敗し、コマンドの一覧も読めない → 見つからないものとして扱う', async () => {
+    const { vscode, state, run } = setup({ ...REMOTE_NO_CLAUDE, getCommandsFails: true });
+    vscode.window.activeTextEditor = makeEditor('/ws/project/src/app.ts', makeSelection(4, 0, 9, 1));
+    await run('refsToChat.sendSelection');
+    assert.ok(state.warnings[0].includes(R.notInstalled));
+  });
+
+  it('リモートでなければ、見えないときは公式コマンドを呼ばない（今までどおり）', async () => {
+    const { state, run } = setup({ claudeInstalled: false });
+    await run('refsToChat.sendFile', A);
+    assert.deepEqual(state.executed, []);
+    assert.ok(state.warnings[0].includes(R.notInstalled));
   });
 });

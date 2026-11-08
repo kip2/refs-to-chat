@@ -1,14 +1,15 @@
 // 公式コマンドで入れないものを、最後にまとめて貼り付けかコピーで届ける
-// 複数あっても、クリップボードへの書き込みと通知は 1 回にまとめる
+// 複数あっても、クリップボードへの書き込みと警告は 1 回にまとめる
 
 import * as vscode from 'vscode';
-import { type InsertFailure, isClaudeInstalled, pasteClipboardIntoChat } from './claudeChat';
+import { type InsertFailure, isClaudeMissing, mayHaveClaude, type PasteResult, pasteClipboardIntoChat } from './claudeChat';
 import { MESSAGES, REASON_MESSAGES } from './messages';
 import { joinReferences } from './reference';
 
 /**
  * 公式コマンドで入れない理由
- * pasteFile は、設定でエクスプローラーのファイルも貼り付けで入れるとき（初期設定）
+ * - notInstalled / failed: 公式コマンドで入れられなかった
+ * - notText / folder / pasteFile: はじめから貼り付けで入れるもの（pasteFile は、設定 use でのファイル）
  */
 export type DeliveryReason = InsertFailure | 'notText' | 'folder' | 'pasteFile';
 
@@ -18,53 +19,68 @@ export interface PendingReference {
   readonly reason: DeliveryReason;
 }
 
+/** チャットに入れられず、コピーした理由 */
+type CopyReason = keyof typeof REASON_MESSAGES;
+
 /**
  * まとめて届ける
- * - 公式拡張があり、理由がフォルダ・開けないファイル・貼り付けの設定のファイルだけ: 貼り付けで入れる
- * - それ以外、または貼り付けを呼べないとき: コピーして警告を出す
+ * - ファイル名に改行などが入っているもの: どこにも入れず、警告だけ出す
+ * - 公式コマンドで入れられなかったものがある: まとめてコピーして警告を出す
+ * - 貼り付けで入れるものだけ: 貼り付ける。貼り付けられなかったら、コピーして警告を出す
  */
 export async function deliverPendingReferences(pending: readonly PendingReference[]): Promise<void> {
-  if (pending.length === 0) return;
+  const unsafe = pending.filter((p) => !isSafeReference(p.ref));
+  if (unsafe.length > 0) void vscode.window.showWarningMessage(MESSAGES.unsafeName(unsafe.length));
 
-  const refs = pending.map((p) => p.ref);
-  const reasons = pending.map((p) => p.reason);
+  const safe = pending.filter((p) => isSafeReference(p.ref));
+  if (safe.length === 0) return;
+  const refs = safe.map((p) => p.ref);
 
-  if (!isClaudeInstalled()) {
-    // フォルダなどは公式コマンドを呼ぶ前に振り分けるので、拡張がないことをここで理由に足す
-    await copyWithWarning(refs, ['notInstalled', ...reasons]);
+  if (!mayHaveClaude()) {
+    await copyWithWarning(refs, ['notInstalled']);
     return;
   }
-  if (reasons.every(canPaste) && refs.every(isSafeToPaste) && (await pasteIntoChat(refs))) return;
-  await copyWithWarning(refs, reasons);
+  const failures = safe.map((p) => p.reason).filter(isFailure);
+  if (failures.length > 0) {
+    await copyWithWarning(refs, failures);
+    return;
+  }
+  const result = await pasteIntoChat(refs);
+  if (result === 'pasted') return;
+  if (result === 'leftInFile') {
+    await copyWithWarning(refs, ['leftInFile']);
+    return;
+  }
+  // Remote では、呼んでみて初めて公式拡張がないと分かる
+  await copyWithWarning(refs, [(await isClaudeMissing()) ? 'notInstalled' : 'pasteFailed']);
 }
 
-/** 公式拡張は動いていて、公式コマンドを使わないだけのとき */
-function canPaste(reason: DeliveryReason): boolean {
-  return reason === 'folder' || reason === 'notText' || reason === 'pasteFile';
+function isFailure(reason: DeliveryReason): reason is InsertFailure {
+  return reason === 'notInstalled' || reason === 'failed';
 }
 
-// フォーカスがチャットに移らないと、貼り付けはエディタやターミナルに入る
-// ファイル名の改行などがターミナルに入るとコマンドとして動きうるので、制御文字を含むものは貼り付けない
-// 見えない書式の文字（文字の向きを変えるものなど）や行区切りも、表示を偽装できるので同じく貼り付けない
-function isSafeToPaste(ref: string): boolean {
+// 改行などの制御文字を含む参照は、貼り付けてもコピーしてもいけない
+// エディタやターミナルに入ると、コマンドとして動きうるため
+// 見えない書式の文字（文字の向きを変えるものなど）や行区切りも、表示を偽装できるので同じく扱う
+function isSafeReference(ref: string): boolean {
   return !/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(ref);
 }
 
 /**
  * コピーしてチャットに貼り付ける
- * 貼り付けを呼べなかったら false（クリップボードには入ったまま）
+ * 貼り付けられなかったときも、クリップボードには入ったまま
  */
-async function pasteIntoChat(refs: readonly string[]): Promise<boolean> {
-  const text = joinReferences(refs);
+async function pasteIntoChat(refs: readonly string[]): Promise<PasteResult> {
+  // 末尾に空白を付ける
+  // 続けて貼り付けたときに、前の参照とくっついて 1 つの参照に見えないようにするため
+  const text = `${joinReferences(refs)} `;
   await vscode.env.clipboard.writeText(text);
-  if (!(await pasteClipboardIntoChat())) return false;
-
-  // 通知は await しない（ユーザーが閉じるまで処理が止まるため）
-  void vscode.window.showInformationMessage(MESSAGES.pasted(refs));
-  return true;
+  // 本当に入ったかは分からない（ログインの画面が出ているときなどは入らない）ので、通知は出さない
+  // 入っていなくても、参照はクリップボードに残っている
+  return pasteClipboardIntoChat(text);
 }
 
-async function copyWithWarning(refs: readonly string[], reasons: readonly DeliveryReason[]): Promise<void> {
+async function copyWithWarning(refs: readonly string[], reasons: readonly CopyReason[]): Promise<void> {
   const text = joinReferences(refs);
   await vscode.env.clipboard.writeText(text);
 
