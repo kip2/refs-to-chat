@@ -5,7 +5,7 @@
 
 ## 準備
 
-1. リポジトリのフォルダで VSIX を作り、VS Code に入れる（初めてなら、先に `npm install` を実行する）
+1. 初めてなら、先に `npm install` を実行する。そのあと、リポジトリのフォルダで VSIX を作り、VS Code に入れる
 
    ```bash
    npm run package
@@ -18,9 +18,9 @@
 2. コマンドパレット（`Ctrl+Shift+P`）で「Developer: Reload Window」を実行する
 3. 拡張機能ビューで、`Refs to Chat` が今回のバージョンになっていることを確かめる
 4. 公式拡張（公式の Claude Code 拡張）が入っていて、ログインしていることを確かめる
-5. 設定 `refsToChat.explorerClipboard` と `refsToChat.previewClipboard` が、初期設定の `use` になっていることを確かめる
+5. 設定 `refsToChat.explorerClipboard` と `refsToChat.previewClipboard` が初期設定の `use`、`refsToChat.markdownPreview` が初期設定の `true` になっていることを確かめる
 
-結果は、表の「結果」の列に OK か NG で書きます。
+結果は表の「結果」の列に OK か NG で書きます。
 NG のときは何が起きたかをメモし、「表示」→「出力」の「Claude VSCode」と、「Developer: Toggle Developer Tools」の「Console」も見てください。
 
 ## 人が確かめる項目
@@ -39,7 +39,7 @@ NG のときは何が起きたかをメモし、「表示」→「出力」の�
 始める前に、WSL 拡張と Remote - SSH 拡張を入れ、それぞれにつなげるようにしておいてください（WSL は Ubuntu 22.04 以降など、新しい Linux を使います）。
 公式拡張もリモート側に入れます。この拡張は、はじめは手元の PC にだけ入れておき、表の上から順に進めます。
 
-エクスプローラーのファイルと Markdown のプレビューは、設定 `use` と `keep` の両方で試します。終わったら `use` に戻してください。
+エクスプローラーのファイルは設定 `refsToChat.explorerClipboard`、Markdown のプレビューは設定 `refsToChat.previewClipboard` を、`use` と `keep` の両方で試します。終わったら `use` に戻してください。
 
 | 項目 | 手順 | 期待する結果 | 結果 |
 | --- | --- | --- | --- |
@@ -51,5 +51,5 @@ NG のときは何が起きたかをメモし、「表示」→「出力」の�
 
 ## 終わったら
 
-- すべて OK なら、リリースの手順（[DEVELOPMENT.md](DEVELOPMENT.md) の「リリースの手順」）に進む
+- すべて OK なら、[DEVELOPMENT.md](DEVELOPMENT.md) の「リリースの手順」に進む
 - NG があれば、Issue にするか、直してからもう一度この手順を通す

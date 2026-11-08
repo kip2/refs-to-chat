@@ -1,6 +1,6 @@
 # テスト方針
 
-この拡張を、どのテストで、どこまで確かめるかをまとめます。
+この拡張をどのテストで、どこまで確かめるかをまとめます。
 テストのしくみは [ARCHITECTURE.md](ARCHITECTURE.md) の 10 章、コマンドは [DEVELOPMENT.md](DEVELOPMENT.md)、人が確かめる手順は [MANUAL_TEST.md](MANUAL_TEST.md) にあります。
 
 ## 考え方
