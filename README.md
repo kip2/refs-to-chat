@@ -51,16 +51,19 @@
 Markdown のプレビュー（`Ctrl+Shift+V` や `Ctrl+K V` で開く、VS Code に組み込みのもの）で文章を選んで右クリックし、「選択範囲をClaudeのチャットに追加」を選びます。
 元の Markdown ファイルの、選んだところの行の参照がチャットに入ります。
 
+> [!NOTE]
+> 使えるのは、VS Code に組み込みの Markdown プレビューだけです。Markdown Preview Enhanced など、ほかの拡張が出すプレビューでは、右クリックメニューに出ません。
+
 | 右クリックする場所 | メニュー | チャットに入る参照 |
 | --- | --- | --- |
 | Markdown のプレビュー（文章を選択している） | 選択範囲をClaudeのチャットに追加 | `@docs/guide.md#12-18`（元のファイルの行） |
 
 初期設定では、参照をクリップボードにコピーしてから、チャットの入力欄に貼り付けます。
-クリップボードを使いたくないときは、設定 `refsToChat.previewClipboard` を `keep` にしてください（くわしくは「[設定](#設定)」）。
+クリップボードを使いたくないときは、設定 `refsToChat.previewClipboard` を `keep` にしてください。この機能を使わないときは、設定 `refsToChat.markdownPreview` を `false` にすると、メニューに出なくなります（くわしくは「[設定](#設定)」）。
 
 ## 設定
 
-エクスプローラーと Markdown のプレビューからチャットに追加するときに、クリップボードを使うかどうかを設定で変えられます。
+エクスプローラーと Markdown のプレビューからチャットに追加するときに、クリップボードを使うかどうかを設定で変えられます。Markdown のプレビューの右クリックメニューを出すかどうかも、設定で変えられます。
 
 <table>
   <tr>
@@ -76,6 +79,15 @@ Markdown のプレビュー（`Ctrl+Shift+V` や `Ctrl+K V` で開く、VS Code 
   <tr>
     <td><code>keep</code></td>
     <td>ファイルではクリップボードを使わない。かわりに、ファイルを一瞬開いて、公式拡張のコマンドで入れる。タブが一瞬開いて閉じる。もともと開いていたタブや選択範囲は、そのまま残る</td>
+  </tr>
+  <tr>
+    <td rowspan="2"><code>refsToChat.markdownPreview</code></td>
+    <td><code>true</code>（初期設定）</td>
+    <td>Markdown のプレビューの右クリックメニューに「選択範囲をClaudeのチャットに追加」を出す</td>
+  </tr>
+  <tr>
+    <td><code>false</code></td>
+    <td>出さない</td>
   </tr>
   <tr>
     <td rowspan="2"><code>refsToChat.previewClipboard</code></td>
@@ -96,7 +108,9 @@ Markdown のプレビュー（`Ctrl+Shift+V` や `Ctrl+K V` で開く、VS Code 
 - 公式拡張（`anthropic.claude-code`）
 - 信頼したワークスペースで使うこと（制限モードでは動きません）
 
-WSL や SSH 先のフォルダを VS Code で開いているときも、この拡張は手元の PC に入れるだけで使えます。
+WSL や SSH 先のフォルダを VS Code で開いているときは、この拡張をリモート側に入れてください。拡張機能ビューで、この拡張の「WSL: Ubuntu にインストール」などを押します。手元の PC にだけ入れても、リモートのフォルダでは動きません。
+
+リモートにつなぐたびに自動で入れたいときは、設定 `remote.defaultExtensionsIfInstalledLocally` に `kip2.refs-to-chat` を足します。
 
 ## インストール
 

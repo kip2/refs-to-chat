@@ -22,8 +22,7 @@
   ],
   "main": "./out/extension.js",
   "extensionKind": [
-    "workspace",
-    "ui"
+    "workspace"
   ],
   "capabilities": {
     "untrustedWorkspaces": {
@@ -77,6 +76,12 @@
           "default": "use",
           "scope": "window",
           "markdownDescription": "エクスプローラーから「Claudeのチャットに追加」したときに、クリップボードを使うかどうかを選びます。`keep` にしても、フォルダ、画像などテキストとして開けないファイル、チャットに追加できなかったときは、クリップボードを使います（元の中身は戻りません）。"
+        },
+        "refsToChat.markdownPreview": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "markdownDescription": "Markdown のプレビューの右クリックメニューに「選択範囲をClaudeのチャットに追加」を出します。`false` にすると出しません。"
         },
         "refsToChat.previewClipboard": {
           "type": "string",
@@ -142,7 +147,7 @@
       "webview/context": [
         {
           "command": "refsToChat.sendPreviewSelection",
-          "when": "(webviewId == 'markdown.preview' || webviewId == 'vscode.markdown.preview.editor') && refsToChatPreviewSelection && !config.claudeCode.useTerminal",
+          "when": "(webviewId == 'markdown.preview' || webviewId == 'vscode.markdown.preview.editor') && refsToChatPreviewSelection && config.refsToChat.markdownPreview && !config.claudeCode.useTerminal",
           "group": "navigation@100"
         }
       ],

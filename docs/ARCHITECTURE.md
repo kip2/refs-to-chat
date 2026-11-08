@@ -82,16 +82,18 @@ flowchart LR
 
 - エディタとエクスプローラーのメニュー項目と表示条件は、`contributes.menus` だけで決まる（コードは書いていない）
 - エディタの右クリックは、選択の有無で「選択範囲を…」と「このファイルを…」のどちらか片方だけを出す（`editorHasSelection`）
-- Markdown のプレビューの右クリックは `webview/context` に宣言する。条件は次の 2 つ
+- Markdown のプレビューの右クリックは `webview/context` に宣言する。条件は次の 3 つ
   - プレビューの `webviewId` が `vscode.markdown.preview.editor`（Ctrl+Shift+V で開いたもの）か `markdown.preview`（コマンドパレットの「Open Preview」と「Open Preview to the Side」で開いたもの）。開き方で ID が違うので、両方を書く
   - プレビューのスクリプトが入れるキー `refsToChatPreviewSelection` がある（文章を選んで右クリックしたときだけ入る → 5-4）
+  - 設定 `refsToChat.markdownPreview` が `true`（初期設定）。この機能を使わない人が、メニューから消せるようにしている
+- 対象は VS Code に組み込みの Markdown プレビューだけ。ほかの拡張のプレビュー（Markdown Preview Enhanced など）は、`webviewId` も中身の作りも違うので、メニューに出ない
 - `markdown.previewScripts` で `media/markdownPreview.js` を組み込みのプレビューに読み込む。設定で止めることはできない（読み込まれても、右クリックのときに属性を 1 つ付けるだけ）
 - すべての `when` に `!config.claudeCode.useTerminal` を付けている。ターミナル版の設定では出さない（公式拡張と同じ条件）
 - エディタの 2 つのコマンドは、テキストのファイルが前面にあるときだけコマンドパレットに出す（`editorLangId`）。`editorIsOpen` だと、チャットをエディタのタブで開いているだけで出てしまうため
 - `sendFile` はエクスプローラーで選んだ URI を、`sendPreviewSelection` はプレビューの値を受け取る前提なので、コマンドパレットには出さない
-- 設定は 2 つ。`refsToChat.explorerClipboard` と `refsToChat.previewClipboard`。どちらも `use`（初期設定）と `keep` で、知らない値は `use` として扱う
+- 設定は 3 つ。`refsToChat.explorerClipboard` と `refsToChat.previewClipboard` は、どちらも `use`（初期設定）と `keep` で、知らない値は `use` として扱う。`refsToChat.markdownPreview`（真偽値、初期設定は `true`）は、メニューの `when` で使うだけで、コードからは読まない
 - `capabilities.untrustedWorkspaces.supported: false` で、制限モードでは動かさない
-- `extensionKind: ["workspace", "ui"]` で、Remote ではリモート側でも手元の PC 側でも動けると宣言している（→ 8 章）
+- `extensionKind: ["workspace"]` で、Remote ではリモート側でだけ動かす（→ 7 章・8 章）
 - `activationEvents` は書いていない（VS Code 1.74 以降は、コマンドを実行したときに自動で有効になる）
 
 ---
@@ -368,6 +370,7 @@ VS Code
 - Markdown のプレビューは、初期設定では貼り付けで入れる。公式コマンドで入れるには元のファイルを一瞬開く必要があり、タブがちらつくため。クリップボードを書き換えたくない人のために、設定 `refsToChat.previewClipboard` の `keep` で公式コマンドに切り替えられる
 - プレビューの行は、ブロックの `data-line` と、ブロックの中の改行の数から決める。`data-line` はスクロールを合わせるための、組み込みのプレビューの作りの一部で、公開された約束ではない。頼る部分は `media/markdownPreview.js` 1 か所にまとめ、変わったら E2E で気づけるようにしている（メニューが出なくなるか、行がずれる）
 - 裏に回ったタブを前面に戻すのに、「グループ内で直前に使ったエディタを開く」を使う。Markdown のプレビュー（Webview のタブ）を前面に出す API がないため。そのグループにフォーカスが移る
+- Remote ではリモート側でだけ動かす（`extensionKind: ["workspace"]`）。Markdown のプレビューを出す組み込みの Markdown 拡張はリモート側で動き、同じ側で動く拡張のスクリプトしか読み込まないため。0.1.0 までは手元の PC に入れるだけでも動くようにしていたが、それだとプレビューだけが動かず、どこまで動くかが分かりにくいので、リモート側に入れる形にそろえた
 - `@types/node` は Node 20 に固定する。VS Code 1.94〜1.100 の拡張ホストは Node 20 で動く。本体が Node 20 にない API を使わないよう、型を合わせている
 
 ---
@@ -380,7 +383,7 @@ VS Code
 | ターミナル版 | 対象外。`useTerminal` が true のときはメニューを出さない | 対象外（意図的） |
 | 同じ名前のフォルダ | マルチルートで同名フォルダがあると、参照が区別できない | `.code-workspace` の `"name"` で回避 |
 | 設定のスコープ | `claudeCode.*` は window / application / machine スコープ。マルチルートのフォルダの settings.json に書いても効かない | できない（VS Code の仕様） |
-| リモート（WSL・SSH・Dev Containers） | 手元の PC にだけ入れると、この拡張は手元で、公式拡張はリモート側で動く。このとき `getExtension` では公式拡張が見えないので、見えなくても公式コマンドを呼んでみる（5-5）。この拡張がリモート側にも入っていると、リモート側のものが動く | 呼んでみて判断する（WSL・SSH で確認済み。Dev Containers は未確認） |
+| リモート（WSL・SSH・Dev Containers） | この拡張はリモート側でだけ動く。手元の PC にだけ入れても、リモートのフォルダでは動かない（拡張機能ビューに、リモート側に入れるボタンが出る）。公式拡張が別の側で動いていると `getExtension` では見えないので、Remote では見えなくても公式コマンドを呼んでみる（5-5） | リモート側に入れてもらう（README に書いている。設定 `remote.defaultExtensionsIfInstalledLocally` で自動で入れられる） |
 | チャットが起動しきっていない | 公式拡張は 15 秒待っても起動しないと、参照を入れずに諦める。失敗を返さないので、この拡張からは分からない | できない（README に書いている） |
 | コマンドパレットの表示 | フォーカスがエクスプローラーやターミナルにあると、ファイルを開いていてもパレットに出ない | 仕様として受け入れる |
 | 組み込みの Markdown プレビューの作り | `data-line` の付き方、`meta#vscode-markdown-preview-data` の `source`、段落の中の改行が残ることに頼っている。どれも公開された約束ではない | E2E で気づく（`media/markdownPreview.js` だけを直す） |

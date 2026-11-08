@@ -49,6 +49,8 @@ export const SETTINGS = {
   section: 'refsToChat',
   /** エクスプローラーから送るファイルで、クリップボードを使うか */
   explorerClipboard: 'explorerClipboard',
+  /** Markdown のプレビューの右クリックメニューに出すか（package.json の when で使うだけ） */
+  markdownPreview: 'markdownPreview',
   /** Markdown のプレビューで選んだところを送るときに、クリップボードを使うか */
   previewClipboard: 'previewClipboard',
 } as const;

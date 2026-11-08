@@ -115,8 +115,9 @@ describe('メニューの表示条件', () => {
     assert.equal(pkg.capabilities.untrustedWorkspaces.supported, false);
   });
 
-  it('Remote（WSL・SSH など）では、リモート側でも手元の PC 側でも動ける', () => {
-    assert.deepEqual(pkg.extensionKind, ['workspace', 'ui']);
+  // Markdown のプレビュー（リモート側で動く）にスクリプトを読み込ませるため、リモート側で動かす
+  it('Remote（WSL・SSH など）では、リモート側でだけ動く', () => {
+    assert.deepEqual(pkg.extensionKind, ['workspace']);
   });
 
   it('右クリックメニューはすべてターミナル版の設定では出さない', () => {
@@ -131,6 +132,8 @@ describe('メニューの表示条件', () => {
     assert.match(when, /webviewId == 'markdown\.preview'/);
     assert.match(when, /webviewId == 'vscode\.markdown\.preview\.editor'/);
     assert.match(when, new RegExp(`&& ${PREVIEW_CONTEXT_KEY} &&`));
+    // 設定で切れる
+    assert.ok(when.includes(`&& config.${SETTINGS.section}.${SETTINGS.markdownPreview} &&`), when);
   });
 
   it('sendPreviewSelection はプレビューの選択を引数で受け取るのでコマンドパレットに出さない', () => {
@@ -188,6 +191,13 @@ describe('設定の宣言', () => {
     assert.deepEqual(preview.enum, ['use', 'keep']);
     assert.equal(preview.default, 'use');
     assert.equal(preview.enumDescriptions?.length, 2);
+  });
+
+  it('プレビューのメニューを出すかの設定は、真偽値で、初期設定は出す（true）', () => {
+    const toggle = pkg.contributes.configuration?.properties[`${SETTINGS.section}.${SETTINGS.markdownPreview}`];
+    assert.ok(toggle, 'markdownPreview が package.json にない');
+    assert.equal(toggle.type, 'boolean');
+    assert.equal(toggle.default, true);
   });
 
   it('設定画面の見出しは拡張の名前', () => {

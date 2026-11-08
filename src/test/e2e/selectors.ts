@@ -72,6 +72,9 @@ export const REOPEN_WITH_TEXT_EDITOR = 'View: Reopen Editor with Text Editor';
  */
 export const MARKDOWN_PREVIEW_DATA = '#vscode-markdown-preview-data';
 
+/** プレビューの中の、元のファイルの行が付いたブロック（中身が描かれたら現れる） */
+export const MARKDOWN_PREVIEW_BLOCK = '[data-line]';
+
 /** 組み込みの Markdown 拡張のコマンドの、コマンドパレットでの名前 */
 export const MARKDOWN_OPEN_PREVIEW = 'Markdown: Open Preview';
 export const MARKDOWN_OPEN_PREVIEW_TO_SIDE = 'Markdown: Open Preview to the Side';

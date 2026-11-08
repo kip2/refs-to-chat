@@ -95,7 +95,12 @@ const BASE_SETTINGS: Record<string, unknown> = {
 };
 
 /** テストの中で変える設定（前の実行が途中で止まっても残らないよう、起動前に消す） */
-const SETTINGS_CHANGED_BY_TESTS = ['claudeCode.useTerminal', 'refsToChat.explorerClipboard', 'refsToChat.previewClipboard'];
+const SETTINGS_CHANGED_BY_TESTS = [
+  'claudeCode.useTerminal',
+  'refsToChat.explorerClipboard',
+  'refsToChat.previewClipboard',
+  'refsToChat.markdownPreview',
+];
 
 /**
  * settings.json を読む
@@ -543,7 +548,9 @@ export class VSCode {
   private async markdownPreview(): Promise<Frame> {
     const find = async () => {
       for (const frame of this.page.frames()) {
-        if ((await frame.locator(S.MARKDOWN_PREVIEW_DATA).count().catch(() => 0)) > 0) return frame;
+        if ((await frame.locator(S.MARKDOWN_PREVIEW_DATA).count().catch(() => 0)) === 0) continue;
+        // 開いた直後は、中身（data-line の付いたブロック）がまだ描かれていないことがあるので、描かれるまで待つ
+        if ((await frame.locator(S.MARKDOWN_PREVIEW_BLOCK).count().catch(() => 0)) > 0) return frame;
       }
       return undefined;
     };

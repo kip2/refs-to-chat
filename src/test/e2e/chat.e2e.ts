@@ -68,6 +68,7 @@ describe('E2E: 本物の VS Code と公式拡張', function () {
     await vs().waitForChatToSettle();
     await vs().setSetting('refsToChat.explorerClipboard', undefined);
     await vs().setSetting('refsToChat.previewClipboard', undefined);
+    await vs().setSetting('refsToChat.markdownPreview', undefined);
     // チャットを閉じた状態から始める（エディタのタブのチャットも、サイドバーのチャットも閉じる）
     await vs().closeAllEditors();
     await vs().hideSecondarySideBar();
@@ -95,6 +96,7 @@ describe('E2E: 本物の VS Code と公式拡張', function () {
       await code.clearChat().catch((err: unknown) => console.error('チャットの入力欄を空にできませんでした', err));
       await code.setSetting('refsToChat.explorerClipboard', undefined).catch(() => undefined);
       await code.setSetting('refsToChat.previewClipboard', undefined).catch(() => undefined);
+      await code.setSetting('refsToChat.markdownPreview', undefined).catch(() => undefined);
       await code.setSetting('claudeCode.useTerminal', undefined).catch(() => undefined);
     } finally {
       await code.close();
@@ -247,6 +249,17 @@ describe('E2E: 本物の VS Code と公式拡張', function () {
       await vs().rightClickPreview(['li', 1, 0], ['code', 0, 15]);
       await vs().clickMenuItem(MENU.selection);
       await expectInChat('@alpha/docs/guide.md#8-12');
+    });
+
+    it('設定 refsToChat.markdownPreview を false にする → 選んでいても、メニューに出ない', async function () {
+      await vs().setSetting('refsToChat.markdownPreview', false);
+      await vs().openFile(GUIDE_MD);
+      await vs().openMarkdownPreview('palette');
+      const items = await vs().rightClickPreview(['p', 0, 30], ['p', 0, 40]);
+      await vs().closeMenu();
+      assert.ok(!items.includes(MENU.selection), items.join(', '));
+      // 何かしらのメニューは出ている（右クリックが効いていないだけで通ってしまわないように）
+      assert.ok(items.length > 0, '右クリックメニューが出ていない');
     });
 
     it('何も選ばずに右クリック → メニューに出ない', async function () {
