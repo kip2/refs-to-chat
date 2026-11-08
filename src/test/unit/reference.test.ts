@@ -3,7 +3,7 @@
 
 import * as assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { fileReference, folderReference, joinReferences } from '../../reference';
+import { fileReference, folderReference, joinReferences, linesReference } from '../../reference';
 import { makeSelection, Range } from '../helpers/vscodeMock';
 
 const PATH = 'src/app.ts';
@@ -57,5 +57,15 @@ describe('folderReference / joinReferences', () => {
 
   it('複数の参照は空白でつなぐ', () => {
     assert.equal(joinReferences(['@a.js', '@src/', '@logo.png']), '@a.js @src/ @logo.png');
+  });
+});
+
+describe('linesReference: 行の範囲（0 始まり）', () => {
+  it('1 行 → #行（1 始まり）', () => {
+    assert.equal(linesReference(PATH, 7, 7), '@src/app.ts#8');
+  });
+
+  it('複数行 → #開始-終了（1 始まり）', () => {
+    assert.equal(linesReference(PATH, 4, 9), '@src/app.ts#5-10');
   });
 });

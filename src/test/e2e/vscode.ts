@@ -10,7 +10,7 @@ import * as cp from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { downloadAndUnzipVSCode, resolveCliArgsFromVSCodeExecutablePath } from '@vscode/test-electron';
-import { _electron, type ElectronApplication, type Locator, type Page } from 'playwright-core';
+import { _electron, type ElectronApplication, type Frame, type Locator, type Page } from 'playwright-core';
 import { EXTENSIONS_DIR, USER_DATA_DIR, USER_SETTINGS, WORKSPACE } from './paths';
 import * as S from './selectors';
 
@@ -27,12 +27,21 @@ const VSCODE_VERSION = '1.145.2';
 const STARTUP_MS = 3000;
 /** settings.json を書き換えてから、VS Code が読み直すまで待つ時間 */
 const SETTINGS_RELOAD_MS = 1500;
+/**
+ * チャットが落ち着くまで待つ時間
+ * 貼り付けた直後などのチャットは、しばらくフォーカスを取り返し続け、開いたコマンドパレットや右クリックメニューを閉じてしまう
+ * 落ち着いたことを知らせる画面の変化がないので、時間で待つ
+ */
+const CHAT_SETTLE_MS = 1500;
 /** コマンドパレットに文字を入れてから、候補が出るまで待つ上限 */
 const QUICK_INPUT_TIMEOUT_MS = 10_000;
 /** 状態によって出たり出なかったりする候補を、出てくるまで待つ上限 */
 const LISTED_TIMEOUT_MS = 2000;
 /** コマンドパレットなどを開き直す回数の上限 */
-const QUICK_INPUT_ATTEMPTS = 3;
+const QUICK_INPUT_ATTEMPTS = 4;
+
+/** フォーカスが Webview（チャットなど）の中にあれば外す（画面で動かす文字列） */
+const BLUR_WEBVIEW = "document.activeElement?.tagName === 'IFRAME' && document.activeElement.blur()";
 
 /** E2E 用の VS Code の実行ファイル（初回だけダウンロードする） */
 export function vscodeExecutable(): Promise<string> {
@@ -86,7 +95,12 @@ const BASE_SETTINGS: Record<string, unknown> = {
 };
 
 /** テストの中で変える設定（前の実行が途中で止まっても残らないよう、起動前に消す） */
-const SETTINGS_CHANGED_BY_TESTS = ['claudeCode.useTerminal', 'refsToChat.explorerClipboard'];
+const SETTINGS_CHANGED_BY_TESTS = [
+  'claudeCode.useTerminal',
+  'refsToChat.explorerClipboard',
+  'refsToChat.previewClipboard',
+  'refsToChat.markdownPreview',
+];
 
 /**
  * settings.json を読む
@@ -128,6 +142,43 @@ interface InputElement {
     execCommand(command: string): boolean;
   };
 }
+
+/**
+ * プレビューの中の文字の位置: [CSS セレクタ, 何番目の要素か, 要素の中で頭から数えた文字の位置]
+ * 例: ['p', 0, 30] は、1 つ目の段落の 30 文字目
+ */
+export type PreviewTextPosition = readonly [selector: string, index: number, offset: number];
+
+/**
+ * プレビューの中で文字を選び、右クリックする位置（フレームの中の座標）を返す関数
+ * 引数は [from, to]
+ * to が null なら選択を消して、from の位置を返す
+ * DOM の型を読み込まないので、プレビューの中で動かす文字列として書く
+ */
+const SELECT_IN_PREVIEW = `([from, to]) => {
+  const at = ([selector, index, offset]) => {
+    const el = document.querySelectorAll(selector)[index];
+    if (!el) throw new Error('プレビューに ' + selector + ' の ' + index + ' 番目がありません');
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let rest = offset;
+    for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+      if (rest <= t.length) return [t, rest];
+      rest -= t.length;
+    }
+    throw new Error(selector + ' の ' + index + ' 番目に ' + offset + ' 文字目がありません');
+  };
+  const [startNode, startOffset] = at(from);
+  startNode.parentElement.scrollIntoView({ block: 'center' });
+  const range = document.createRange();
+  range.setStart(startNode, startOffset);
+  if (to) range.setEnd(...at(to));
+  const selection = document.getSelection();
+  selection.removeAllRanges();
+  if (to) selection.addRange(range);
+  // 選んだ範囲の、最初の文字の少し内側を右クリックする
+  const rect = to ? range.getClientRects()[0] : startNode.parentElement.getBoundingClientRect();
+  return { x: rect.left + Math.min(3, rect.width / 2), y: rect.top + rect.height / 2 };
+}`;
 
 /**
  * 条件を満たすまで繰り返し確かめる
@@ -182,9 +233,11 @@ export class VSCode {
   /**
    * ユーザー設定を変える（undefined なら消す）
    * VS Code が読み直すまで少し待つ
+   * 今と同じ値なら、書かずに待たない（テストごとに設定を戻すので、たいていは同じ値）
    */
   async setSetting(key: string, value: unknown): Promise<void> {
     const settings = readSettings();
+    if (JSON.stringify(settings[key]) === JSON.stringify(value)) return;
     if (value === undefined) delete settings[key];
     else settings[key] = value;
     writeSettings(settings);
@@ -200,10 +253,14 @@ export class VSCode {
     if (await this.page.locator(S.QUICK_INPUT_BOX).isVisible()) await this.page.keyboard.press('Escape');
     const box = this.page.locator(S.QUICK_INPUT_BOX);
     for (let attempt = 0; attempt < QUICK_INPUT_ATTEMPTS; attempt++) {
+      // チャットの Webview にフォーカスがあると、キーが VS Code に届かなかったり、開いた入力欄がすぐ閉じたりする
+      // 貼り付けた直後のチャットは、しばらくフォーカスを取り返し続けるので、やり直すたびに少し長く待つ
       if (attempt > 0) {
-        // チャットの Webview にフォーカスがあると、キーが VS Code に届かなかったり、開いた入力欄がすぐ閉じたりする
         // サイドバーの見出しをクリックして、フォーカスを VS Code に移してから、もう一度押す
+        await this.page.waitForTimeout(500 * attempt);
         await this.page.locator(S.SIDEBAR_TITLE).first().click();
+      } else {
+        await this.page.evaluate(BLUR_WEBVIEW);
       }
       await this.page.keyboard.press(key);
       if (!(await this.stayedOpen(box))) continue;
@@ -212,7 +269,15 @@ export class VSCode {
         .fill(text, { timeout: LISTED_TIMEOUT_MS })
         .then(() => true)
         .catch(() => false);
-      if (filled && (await box.isVisible())) break;
+      if (!filled) continue;
+      // 候補が出る前に、チャットがフォーカスを取り返して入力欄を閉じることもあるので、そのときもやり直す
+      const row = this.page.locator(S.QUICK_INPUT_ROW).first();
+      const listed = await poll(
+        async () => ((await row.isVisible()) ? 'listed' : (await box.isVisible()) ? 'waiting' : 'closed'),
+        (state) => state !== 'waiting',
+        QUICK_INPUT_TIMEOUT_MS,
+      );
+      if (listed === 'listed') break;
     }
     await box.waitFor({ state: 'visible', timeout: QUICK_INPUT_TIMEOUT_MS });
     await this.page.locator(S.QUICK_INPUT_ROW).first().waitFor({ state: 'visible', timeout: QUICK_INPUT_TIMEOUT_MS });
@@ -233,8 +298,8 @@ export class VSCode {
   }
 
   private quickInputRow(label: string): Locator {
-    const name = this.page.locator(S.QUICK_INPUT_LABEL, { hasText: exactly(label) });
-    return this.page.locator(S.QUICK_INPUT_ROW).filter({ has: name }).first();
+    const labelCell = this.page.locator(S.QUICK_INPUT_LABEL, { hasText: exactly(label) });
+    return this.page.locator(S.QUICK_INPUT_ROW).filter({ has: labelCell }).first();
   }
 
   /** 候補をクリックして、入力欄が閉じるまで待つ */
@@ -267,10 +332,20 @@ export class VSCode {
 
   /** コマンドパレットからコマンドを実行する（Enter ではなく、名前が完全に一致する候補をクリックする） */
   async runCommand(title: string): Promise<void> {
-    await this.openQuickInput('F1', `>${title}`);
-    const row = this.quickInputRow(title);
-    await row.waitFor({ state: 'visible', timeout: QUICK_INPUT_TIMEOUT_MS });
-    await this.clickQuickInputRow(row);
+    for (let attempt = 1; ; attempt++) {
+      await this.openQuickInput('F1', `>${title}`);
+      const row = this.quickInputRow(title);
+      await row.waitFor({ state: 'visible', timeout: QUICK_INPUT_TIMEOUT_MS });
+      try {
+        // 候補が出たあと、クリックする前に、チャットがフォーカスを取り返して入力欄を閉じることがある
+        // そのときはクリックできないので、入力欄を開くところからやり直す
+        await row.click({ timeout: LISTED_TIMEOUT_MS });
+        break;
+      } catch (err) {
+        if (attempt >= QUICK_INPUT_ATTEMPTS) throw err;
+      }
+    }
+    await this.page.locator(S.QUICK_INPUT_BOX).waitFor({ state: 'hidden', timeout: QUICK_INPUT_TIMEOUT_MS });
   }
 
   /** 候補にあるときだけ実行する（状態によって出たり出なかったりするコマンド用） */
@@ -296,18 +371,73 @@ export class VSCode {
    */
   async openFile(fullPath: string): Promise<void> {
     // チャットの Webview にフォーカスがあると、Ctrl+P が VS Code に届かないので、フォーカスを外す
-    await this.page.evaluate("document.activeElement?.tagName === 'IFRAME' && document.activeElement.blur()");
+    await this.page.evaluate(BLUR_WEBVIEW);
     await this.openQuickInput('Control+P', fullPath);
     await this.clickQuickInputRow(this.page.locator(S.QUICK_INPUT_ROW).first());
     const name = path.basename(fullPath);
     await this.page.locator(S.activeTabByName(name)).first().waitFor({ timeout: 10_000 });
+    const text = this.page.locator(S.editorTextByName(name)).first();
+    // Ctrl+Shift+V で Markdown のプレビューにしたファイルは、次に開いたときもプレビューで開く（VS Code が覚えている）
+    // テキストのエディタが出てこなければ、テキストのエディタで開き直す
+    const isText = await text
+      .waitFor({ timeout: LISTED_TIMEOUT_MS })
+      .then(() => true)
+      .catch(() => false);
+    if (!isText) await this.runCommand(S.REOPEN_WITH_TEXT_EDITOR);
     // チャットがフォーカスを取ると「アクティブなグループ」がチャットの方に移ることがあるので、そのファイルのタブがあるグループのエディタをクリックする
-    await this.page.locator(S.editorTextByName(name)).first().click();
+    await text.click();
     await this.page.keyboard.press('Control+Home');
   }
 
+  /** チャットが落ち着くまで待つ（CHAT_SETTLE_MS） */
+  async waitForChatToSettle(): Promise<void> {
+    await this.page.waitForTimeout(CHAT_SETTLE_MS);
+  }
+
+  /** タブ（チャットやプレビューのタブも含む）が 1 つでもあれば、すべて閉じる */
   async closeAllEditors(): Promise<void> {
+    if ((await this.page.locator(S.ANY_TAB).count()) === 0) return;
     await this.runCommand(S.CLOSE_ALL_EDITORS);
+  }
+
+  /**
+   * 右のサイドバー（サイドバーで開いたチャットがある）が開いていれば閉じる
+   * 閉じているときは、コマンドパレットに閉じるコマンドが出ないので、画面を見て決める
+   */
+  async hideSecondarySideBar(): Promise<void> {
+    const bar = this.page.locator(S.SECONDARY_SIDE_BAR);
+    if (!(await bar.isVisible())) return;
+    await this.runCommand(S.HIDE_SECONDARY_SIDE_BAR);
+    await bar.waitFor({ state: 'hidden', timeout: 5000 });
+  }
+
+/**
+   * そのファイルのタブがあるエディタグループで、前面にあるタブの名前（なければ空）
+   * フォーカスはチャットに移っていることがあるので、今のグループではなく、そのファイルのグループを見る
+   */
+  async frontTabName(fileName: string): Promise<string> {
+    const tab = this.page.locator(S.frontTabInGroupOf(fileName)).first();
+    // 見つからないときに待ち続けないよう、先に数を確かめる
+    if ((await tab.count()) === 0) return '';
+    const label = await tab.getAttribute('aria-label');
+    return (label ?? '').split(',')[0].trim();
+  }
+
+  /**
+   * そのファイルのタブがあるエディタグループで、前面にあるタブが、その名前になるまで待つ
+   * 最後に読んだ名前を返す
+   */
+  async waitForFrontTabName(fileName: string, expected: string, timeoutMs = 5000): Promise<string> {
+    return poll(
+      () => this.frontTabName(fileName),
+      (name) => name === expected,
+      timeoutMs,
+    );
+  }
+
+  /** 表示されている文字（タブの名前）が一致するタブをクリックして、前面に出す */
+  async clickTab(label: string): Promise<void> {
+    await this.page.locator(S.ANY_TAB, { hasText: exactly(label) }).first().click();
   }
 
   async tabCount(name: string): Promise<number> {
@@ -398,6 +528,60 @@ export class VSCode {
         );
       }
     }
+  }
+
+  // ---- Markdown のプレビュー ----
+
+  /**
+   * 前面の Markdown ファイルのプレビューを開き、プレビューの中身が出るまで待つ
+   * 開き方でプレビューの webviewId が違う（VS Code 1.145 で確かめた）
+   * - shortcut: Ctrl+Shift+V（vscode.markdown.preview.editor）
+   *   エディタにフォーカスがあること（openFile のあと）が前提
+   * - palette: コマンドパレットの「Markdown: Open Preview」（markdown.preview）
+   * - side: コマンドパレットの「Markdown: Open Preview to the Side」（markdown.preview）
+   */
+  async openMarkdownPreview(how: 'shortcut' | 'palette' | 'side'): Promise<void> {
+    if (how === 'shortcut') await this.page.keyboard.press('Control+Shift+V');
+    else await this.runCommand(how === 'side' ? S.MARKDOWN_OPEN_PREVIEW_TO_SIDE : S.MARKDOWN_OPEN_PREVIEW);
+    await this.markdownPreview();
+  }
+
+  /** プレビューの中身のフレーム（Webview の中） */
+  private async markdownPreview(): Promise<Frame> {
+    const find = async () => {
+      for (const frame of this.page.frames()) {
+        if ((await frame.locator(S.MARKDOWN_PREVIEW_DATA).count().catch(() => 0)) === 0) continue;
+        // 開いた直後は、中身（data-line の付いたブロック）がまだ描かれていないことがあるので、描かれるまで待つ
+        if ((await frame.locator(S.MARKDOWN_PREVIEW_BLOCK).count().catch(() => 0)) > 0) return frame;
+      }
+      return undefined;
+    };
+    const frame = await poll(find, (f) => f !== undefined, 15_000);
+    if (!frame) throw new Error('Markdown のプレビューが開きません');
+    return frame;
+  }
+
+  /**
+   * プレビューの中の文字を選んで右クリックし、メニューの項目を返す（メニューは開いたまま）
+   * to を省くと、何も選ばずに from の位置を右クリックする
+   */
+  async rightClickPreview(from: PreviewTextPosition, to?: PreviewTextPosition): Promise<string[]> {
+    const frame = await this.markdownPreview();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const point = (await frame.evaluate(`(${SELECT_IN_PREVIEW})(${JSON.stringify([from, to ?? null])})`)) as {
+        x: number;
+        y: number;
+      };
+      // フレームの位置を足して、画面の上の位置にする（入れ子のフレームでも、画面の上の位置が返る）
+      const box = await (await frame.frameElement()).boundingBox();
+      if (!box) throw new Error('Markdown のプレビューが見えていません');
+      await this.page.mouse.click(box.x + point.x, box.y + point.y, { button: 'right' });
+      await this.page.locator(S.CONTEXT_MENU).first().waitFor({ timeout: 5000 }).catch(() => undefined);
+      await this.page.waitForTimeout(300);
+      // チャットがフォーカスを取ってメニューを閉じることがあるので、そのときは選び直してもう一度開く
+      if ((await this.page.locator(S.CONTEXT_MENU).count()) > 0) break;
+    }
+    return this.menuItems();
   }
 
   // ---- 右クリックメニュー ----

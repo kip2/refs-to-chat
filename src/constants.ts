@@ -5,6 +5,7 @@ export const COMMANDS = {
   sendSelection: 'refsToChat.sendSelection',
   sendCurrentFile: 'refsToChat.sendCurrentFile',
   sendFile: 'refsToChat.sendFile',
+  sendPreviewSelection: 'refsToChat.sendPreviewSelection',
 } as const;
 
 /**
@@ -46,6 +47,10 @@ export const LOG_PREFIX = '[refs-to-chat]';
 /** 設定（package.json の contributes.configuration と一致させる） */
 export const SETTINGS = {
   section: 'refsToChat',
-  /** エクスプローラーから送るファイルで、クリップボードを使うか */
+  /** エクスプローラーからファイルを追加するときに、クリップボードを使うか */
   explorerClipboard: 'explorerClipboard',
+  /** Markdown のプレビューの右クリックメニューに出すか（package.json の when で使うだけ） */
+  markdownPreview: 'markdownPreview',
+  /** Markdown のプレビューから追加するときに、クリップボードを使うか */
+  previewClipboard: 'previewClipboard',
 } as const;

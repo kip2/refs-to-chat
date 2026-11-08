@@ -2,7 +2,7 @@
 // 中身には触れず、公開コマンドを呼ぶだけ
 
 import * as vscode from 'vscode';
-import { CLAUDE, FOCUS_WAIT_MS, LOG_PREFIX, PASTE_CHECK_MS, PASTE_COMMAND } from './constants';
+import { CLAUDE, FOCUS_WAIT_MS, LOG_PREFIX, PASTE_CHECK_MS, PASTE_COMMAND } from '../constants';
 
 export type InsertFailure = 'notInstalled' | 'failed';
 
@@ -16,8 +16,9 @@ function isClaudeInstalledHere(): boolean {
 
 /**
  * 公式拡張のコマンドを呼んでみる価値があるか
- * Remote（WSL・SSH・Dev Containers）では、公式拡張がリモート側にあり、手元の PC で動くこの拡張からは見えない
- * それでもコマンドは呼べるので、Remote のときは呼んでみるまで分からないものとして扱う
+ * Remote（WSL・SSH・Dev Containers）では、この拡張はリモート側で動く
+ * 公式拡張が別の側で動いていると getExtension では見えないが、コマンドは呼べる
+ * そのため、Remote のときは呼んでみるまで分からないものとして扱う
  */
 export function mayHaveClaude(): boolean {
   return isClaudeInstalledHere() || vscode.env.remoteName !== undefined;

@@ -12,6 +12,8 @@ export const REASON_MESSAGES = {
 export const MESSAGES = {
   noEditor: '開いているファイルがありません',
   noTarget: '追加するファイルやフォルダがありません',
+  noPreviewSelection:
+    'プレビューで選んだところが、元のファイルのどの行か分かりませんでした。プレビューを開き直してから、もう一度試してください',
   copied: (why: string, text: string) => `${why}。参照をクリップボードにコピーしました: ${text}`,
   unsafeName: (count: number) =>
     `ファイル名に改行などの特別な文字が入っているものが ${count} 件あったので、追加もコピーもしませんでした`,

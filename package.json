@@ -2,7 +2,7 @@
   "name": "refs-to-chat",
   "displayName": "Refs to Chat",
   "description": "右クリックから、選択範囲・ファイル・フォルダの参照（@ファイル#行）を Claude Code のチャットに追加する（非公式）",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "kip2",
   "license": "MIT",
   "private": true,
@@ -22,8 +22,7 @@
   ],
   "main": "./out/extension.js",
   "extensionKind": [
-    "workspace",
-    "ui"
+    "workspace"
   ],
   "capabilities": {
     "untrustedWorkspaces": {
@@ -72,14 +71,37 @@
           ],
           "enumDescriptions": [
             "クリップボードを使う。ファイルを開かずに入れる。クリップボードの中身は書き換わる",
-            "ファイルではクリップボードを使わない。かわりに、ファイルのタブが一瞬開いて閉じる"
+            "ファイルではクリップボードを使わない。かわりに、ファイルを一瞬開いて入れる（もともと開いていなければ、タブは閉じる）"
           ],
           "default": "use",
           "scope": "window",
           "markdownDescription": "エクスプローラーから「Claudeのチャットに追加」したときに、クリップボードを使うかどうかを選びます。`keep` にしても、フォルダ、画像などテキストとして開けないファイル、チャットに追加できなかったときは、クリップボードを使います（元の中身は戻りません）。"
+        },
+        "refsToChat.markdownPreview": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "markdownDescription": "Markdown のプレビューの右クリックメニューに「選択範囲をClaudeのチャットに追加」を出します。`false` にすると出しません。"
+        },
+        "refsToChat.previewClipboard": {
+          "type": "string",
+          "enum": [
+            "use",
+            "keep"
+          ],
+          "enumDescriptions": [
+            "クリップボードを使う。元のファイルを開かずに入れる。クリップボードの中身は書き換わる",
+            "クリップボードを使わない。かわりに、元のファイルを一瞬開いてその行を選んで入れる（横に表示していれば、そのエディタを使う）"
+          ],
+          "default": "use",
+          "scope": "window",
+          "markdownDescription": "Markdown のプレビューから「選択範囲をClaudeのチャットに追加」したときに、クリップボードを使うかどうかを選びます。`keep` にしても、チャットに追加できなかったときは、クリップボードを使います（元の中身は戻りません）。"
         }
       }
     },
+    "markdown.previewScripts": [
+      "./media/markdownPreview.js"
+    ],
     "commands": [
       {
         "command": "refsToChat.sendSelection",
@@ -94,6 +116,11 @@
       {
         "command": "refsToChat.sendFile",
         "title": "Claudeのチャットに追加",
+        "category": "Refs to Chat"
+      },
+      {
+        "command": "refsToChat.sendPreviewSelection",
+        "title": "選択範囲をClaudeのチャットに追加",
         "category": "Refs to Chat"
       }
     ],
@@ -117,6 +144,13 @@
           "group": "navigation@100"
         }
       ],
+      "webview/context": [
+        {
+          "command": "refsToChat.sendPreviewSelection",
+          "when": "(webviewId == 'markdown.preview' || webviewId == 'vscode.markdown.preview.editor') && refsToChatPreviewSelection && config.refsToChat.markdownPreview && !config.claudeCode.useTerminal",
+          "group": "navigation@100"
+        }
+      ],
       "commandPalette": [
         {
           "command": "refsToChat.sendSelection",
@@ -128,6 +162,10 @@
         },
         {
           "command": "refsToChat.sendFile",
+          "when": "false"
+        },
+        {
+          "command": "refsToChat.sendPreviewSelection",
           "when": "false"
         }
       ]

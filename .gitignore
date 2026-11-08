@@ -3,8 +3,9 @@ node_modules/
 out/
 .vscode-test/
 *.vsix
+/video
 
-# 秘密情報
+# シークレット
 .env
 .env.*
 

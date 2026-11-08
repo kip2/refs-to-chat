@@ -25,13 +25,21 @@ export interface LineSelection {
 export function fileReference(path: string, selection?: LineSelection): string {
   if (!selection || selection.isEmpty) return `@${path}`;
 
-  const first = selection.start.line + 1;
   // 行末まで選ぶと、選択は次の行の先頭（0 文字目）で終わる
   // その次の行は含めない
   const endsAtNextLineStart = selection.end.character === 0 && selection.end.line > selection.start.line;
-  const last = selection.end.line + 1 - (endsAtNextLineStart ? 1 : 0);
+  const last = selection.end.line - (endsAtNextLineStart ? 1 : 0);
 
-  return first === last ? `@${path}#${first}` : `@${path}#${first}-${last}`;
+  return linesReference(path, selection.start.line, last);
+}
+
+/**
+ * 行の範囲の参照を作る（first と last は 0 始まりで、last の行も含む）
+ * - 1 行:   `@src/app.ts#8`
+ * - 複数行: `@src/app.ts#5-10`
+ */
+export function linesReference(path: string, first: number, last: number): string {
+  return first === last ? `@${path}#${first + 1}` : `@${path}#${first + 1}-${last + 1}`;
 }
 
 /**

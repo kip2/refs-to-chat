@@ -1,6 +1,6 @@
 # 開発
 
-本体もテストも TypeScript で書いています（ソースは `src/`、テストは `src/test/`、コンパイル結果は `out/`）。
+本体もテストも TypeScript で書いています（ソースは `src/`、テストは `src/test/`、コンパイル結果は `out/`）。Markdown のプレビューに読み込むスクリプトだけは JavaScript です（`media/`）。
 Node.js 26 を使います（`.node-version` に書いてあります）。
 このフォルダを VS Code で開いて `F5` を押すと、コンパイルしてから、拡張を読み込んだ VS Code が起動します。
 
@@ -20,7 +20,7 @@ npm run package             # VSIX ファイルを作る
 ```
 
 - コードを変えたら、`npm run lint`、`npm test`、`npm run test:integration` を流します。CI で動くのは `npm run lint` と `npm test` だけです
-- 統合テストと E2E テストは、クリップボードの中身を書き換えます。流しているあいだは、コピーや貼り付けをしないでください
+- 統合テストと E2E テストはクリップボードの中身を書き換えます。流しているあいだは、コピーや貼り付けをしないでください
 
 ## リリースの手順
 
@@ -40,11 +40,11 @@ npm run package             # VSIX ファイルを作る
    git push origin v<バージョン>
    ```
 
-4. GitHub Actions（[release.yml](../.github/workflows/release.yml)）がテストをして VSIX を作り、Releases に添付する。説明文は、CHANGELOG.md のそのバージョンの項目から作る
+4. GitHub Actions（[release.yml](../.github/workflows/release.yml)）がテストをして VSIX を作り、Releases に添付する。説明文は CHANGELOG.md のそのバージョンの項目から作る
 
 タグと `version` が違うときや、CHANGELOG.md にそのバージョンの項目がないときは、Actions が失敗します。
 
-VSIX には、GitHub Actions で作ったことの証明が付きます。確かめるときは、[GitHub CLI](https://cli.github.com/) で次を実行します。
+VSIX には GitHub Actions で作ったことの証明が付きます。確かめるときは、[GitHub CLI](https://cli.github.com/) で次を実行します。
 
 ```bash
 gh attestation verify refs-to-chat-<バージョン>.vsix -R kip2/refs-to-chat

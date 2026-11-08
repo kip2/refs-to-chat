@@ -2,16 +2,16 @@
 // 複数あっても、クリップボードへの書き込みと警告は 1 回にまとめる
 
 import * as vscode from 'vscode';
-import { type InsertFailure, isClaudeMissing, mayHaveClaude, type PasteResult, pasteClipboardIntoChat } from './claudeChat';
-import { MESSAGES, REASON_MESSAGES } from './messages';
-import { joinReferences } from './reference';
+import { type InsertFailure, isClaudeMissing, mayHaveClaude, type PasteResult, pasteClipboardIntoChat } from '../claude/chat';
+import { MESSAGES, REASON_MESSAGES } from '../messages';
+import { joinReferences } from '../reference';
 
 /**
- * 公式コマンドで入れない理由
+ * まとめて届ける理由
  * - notInstalled / failed: 公式コマンドで入れられなかった
- * - notText / folder / pasteFile: はじめから貼り付けで入れるもの（pasteFile は、設定 use でのファイル）
+ * - paste: 貼り付けで入れるもの（フォルダ、設定 use のもの、開けなかったファイル）
  */
-export type DeliveryReason = InsertFailure | 'notText' | 'folder' | 'pasteFile';
+export type DeliveryReason = InsertFailure | 'paste';
 
 /** まとめて届ける参照と、その理由 */
 export interface PendingReference {
