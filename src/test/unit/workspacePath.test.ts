@@ -19,7 +19,7 @@ afterEach(() => {
 async function ref(file: string, sel: Range, folders?: string[]): Promise<string> {
   const { vscode, state, run } = setup({ claudeInstalled: false, workspaceFolders: folders });
   vscode.window.activeTextEditor = makeEditor(file, sel);
-  await run('rightClickMention.sendSelection');
+  await run('refsToChat.sendSelection');
   return state.clipboard;
 }
 
@@ -57,7 +57,7 @@ describe('参照のパス形式', () => {
       return orig(...args);
     };
     vscode.window.activeTextEditor = makeEditor('/ws/project/x.js');
-    await run('rightClickMention.sendCurrentFile');
+    await run('refsToChat.sendCurrentFile');
     assert.deepEqual(argCounts, [1]);
   });
 });

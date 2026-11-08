@@ -115,6 +115,7 @@ describe('メニューの表示条件', () => {
   it('Remote（WSL・SSH など）では、リモート側でも手元の PC 側でも動ける', () => {
     assert.deepEqual(pkg.extensionKind, ['workspace', 'ui']);
   });
+
   it('右クリックメニューはすべてターミナル版の設定では出さない', () => {
     for (const m of [...editor, ...explorer]) assert.ok(m.when?.includes(TERMINAL_GUARD), m.command);
   });
@@ -123,7 +124,9 @@ describe('メニューの表示条件', () => {
     assert.equal(whenOf(palette, COMMANDS.sendFile), 'false');
   });
 
-  it('パレットに出すコマンドは、テキストのファイルが前面にあるときだけ、ターミナル版の設定では出さない', () => {
+  // editorLangId は、テキストのエディタが前面にあるときだけ値が入る
+  // ファイルを開いていない、チャットのタブだけ、チャットのタブが前面、のときは空になる
+  it('パレットに出すコマンドは、テキストのファイルが前面にあるときだけ出し、ターミナル版の設定では出さない', () => {
     for (const m of palette.filter((m) => m.when !== 'false')) {
       assert.equal(m.when, `editorLangId && ${TERMINAL_GUARD}`, m.command);
     }
@@ -135,16 +138,16 @@ describe('メニューの表示条件', () => {
 });
 
 describe('設定の宣言', () => {
-  const key = `${SETTINGS.section}.${SETTINGS.explorerFiles}`;
+  const key = `${SETTINGS.section}.${SETTINGS.explorerClipboard}`;
   const prop = pkg.contributes.configuration?.properties[key];
 
-  it('エクスプローラーのファイルの入れ方を、package.json と constants.ts で同じ名前にしている', () => {
+  it('エクスプローラーのファイルでクリップボードを使うかの設定を、package.json と constants.ts で同じ名前にしている', () => {
     assert.ok(prop, `${key} が package.json にない`);
   });
 
-  it('選べるのは paste と open で、初期設定は paste', () => {
-    assert.deepEqual(prop?.enum, ['paste', 'open']);
-    assert.equal(prop?.default, 'paste');
+  it('選べるのは use と keep で、初期設定は use', () => {
+    assert.deepEqual(prop?.enum, ['use', 'keep']);
+    assert.equal(prop?.default, 'use');
     assert.equal(prop?.enumDescriptions?.length, 2);
   });
 

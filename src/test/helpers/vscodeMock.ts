@@ -61,6 +61,8 @@ export function uri(fsPath: string): MockUri {
 interface MockDocument {
   uri: MockUri;
   fileName: string;
+  /** ドキュメントの版（変わるたびに 1 つ進む） */
+  version?: number;
 }
 
 /** 本物と同じく、selection は selections の先頭 */
@@ -92,6 +94,24 @@ export interface MockOptions {
   /** ワークスペースフォルダの絶対パス（2 つ以上でマルチルート） */
   workspaceFolders?: string[];
   claudeInstalled?: boolean;
+  /**
+   * Remote（WSL など）につないでいるときの名前（例: `wsl`）
+   * Remote では、公式拡張がリモート側にあると getExtension で見えない
+   */
+  remoteName?: string;
+  /** 公式拡張がリモート側にある（getExtension では見えないが、コマンドは呼べる）。remoteName と一緒に使う */
+  claudeInRemote?: boolean;
+  /** getCommands が例外を投げる */
+  getCommandsFails?: boolean;
+  /**
+   * フォーカスがチャットに移らず、貼り付けがファイルに入ってしまう（ファイルの変更が届く）
+   * - active: 前面のエディタのファイルに入る
+   * - other: 前面ではないファイルに入る
+   * - activeThenEdited: 前面のエディタのファイルに入り、そのあとすぐ別の変更も入る
+   */
+  pasteIntoFile?: 'active' | 'other' | 'activeThenEdited';
+  /** undo を呼んでも、何も取り消されない */
+  undoDoesNothing?: boolean;
   /** executeCommand の動き（throw で失敗を再現） */
   onExecute?: (id: string, ...args: unknown[]) => unknown;
   /** openTextDocument が失敗するファイル */
@@ -118,7 +138,7 @@ export interface MockOptions {
   chatInEditorTab?: boolean;
   /** チャットのタブがあるエディタグループ（chatInEditorTab のとき、チャットを開くとこのグループが今のグループになる） */
   chatColumn?: number;
-  /** 設定（例: `{ 'rightClickMention.explorerFiles': 'open' }`） */
+  /** 設定（例: `{ 'refsToChat.explorerClipboard': 'keep' }`） */
   settings?: Record<string, unknown>;
 }
 
@@ -132,6 +152,11 @@ interface MockTab {
 }
 
 type Handler = (...args: unknown[]) => unknown;
+type DocChangeListener = (e: { document: MockDocument; contentChanges: { text: string }[] }) => void;
+
+// 公式拡張のコマンド（getCommands で返す）
+const CMD_FOCUS = 'claude-vscode.focus';
+const CMD_INSERT = 'claude-vscode.insertAtMention';
 
 export interface MockState {
   /** executeCommand に渡された ID */
@@ -163,6 +188,13 @@ export interface MockState {
 }
 
 export function createVscodeMock(opts: MockOptions = {}) {
+  if (opts.claudeInRemote && !opts.remoteName) throw new Error('claudeInRemote は remoteName と一緒に使う');
+  // 公式拡張が、この拡張と同じ場所にあるか（リモート側にあるときは見えない）
+  const claudeHere = opts.claudeInstalled !== false && !opts.claudeInRemote;
+  // 公式コマンドを呼べるか（同じ場所か、リモート側にある）
+  const claudeReachable = claudeHere || opts.claudeInRemote === true;
+  const docChangeListeners = new Set<DocChangeListener>();
+  let pastedDocument: MockDocument | undefined;
   const folders = (opts.workspaceFolders ?? ['/ws/project']).map((p, i) => ({
     uri: uri(p),
     name: path.posix.basename(p),
@@ -206,6 +238,10 @@ export function createVscodeMock(opts: MockOptions = {}) {
     TabInputText,
     workspace: {
       workspaceFolders: folders,
+      onDidChangeTextDocument(listener: DocChangeListener) {
+        docChangeListeners.add(listener);
+        return { dispose: () => docChangeListeners.delete(listener) };
+      },
       // 本物と同じく、設定されていなければ初期値を返す
       getConfiguration(section: string) {
         return {
@@ -314,7 +350,21 @@ export function createVscodeMock(opts: MockOptions = {}) {
         state.log.push(`cmd:${id}`);
         // 公式の「@メンションを入れる」は、エディタから参照を作ってから、チャットにフォーカスを移す
         // テストの onExecute は「参照を作る時点」なので、フォーカスを移す前に呼ぶ
+        // 公式拡張がどこにもないときは、公式コマンドは見つからない
+        if (id.startsWith('claude-vscode.') && !claudeReachable) throw new Error(`command '${id}' not found`);
         const result = opts.onExecute?.(id, ...args);
+        if (id === 'editor.action.clipboardPasteAction' && opts.pasteIntoFile) {
+          const active = vscode.window.activeTextEditor?.document;
+          const target: MockDocument =
+            opts.pasteIntoFile === 'other' || !active ? { uri: uri('/ws/project/other.js'), fileName: 'other.js' } : active;
+          target.version = (target.version ?? 1) + 1;
+          pastedDocument = target;
+          for (const listener of docChangeListeners) listener({ document: target, contentChanges: [{ text: state.clipboard }] });
+          if (opts.pasteIntoFile === 'activeThenEdited') target.version += 1;
+        }
+        if (id === 'undo' && pastedDocument && !opts.undoDoesNothing) {
+          pastedDocument.version = (pastedDocument.version ?? 1) + 1;
+        }
         // チャットをエディタのタブで開いていると、チャットに移ったときにアクティブなエディタがなくなる
         // 今のグループも、チャットのタブがあるグループに移る
         const movesToChat = id === 'claude-vscode.focus' || id === 'claude-vscode.insertAtMention';
@@ -324,12 +374,20 @@ export function createVscodeMock(opts: MockOptions = {}) {
         }
         return result;
       },
+      // 公式拡張がどこかにあれば、その（呼んだあとの）コマンドが登録されている
+      // 本物では、公式拡張が起動してコマンドを登録するまでは出てこない
+      // この拡張は公式コマンドを呼んだあとにしか調べないので、モックでは区別しない
+      async getCommands() {
+        if (opts.getCommandsFails) throw new Error('getCommands failed');
+        return [...state.registered.keys(), ...(claudeReachable ? [CMD_FOCUS, CMD_INSERT] : [])];
+      },
     },
     extensions: {
       getExtension: (id: string) =>
-        opts.claudeInstalled === false || id !== 'anthropic.claude-code' ? undefined : { id },
+        claudeHere && id === 'anthropic.claude-code' ? { id } : undefined,
     },
     env: {
+      remoteName: opts.remoteName,
       clipboard: {
         async writeText(t: string) {
           state.clipboard = t;
@@ -378,9 +436,11 @@ export function loadExtension(vscode: VscodeMock): Extension {
 export function setup(opts?: MockOptions) {
   const { vscode, state } = createVscodeMock(opts);
   const ext = loadExtension(vscode);
-  // 貼り付け前の待ち時間はテストでは待たない
+  // 貼り付けの前後の待ち時間はテストでは待たない
   // 拡張は呼ぶたびに constants から読むので、読み込んだあとに書き換えれば効く
-  (require(path.join(OUT_DIR, 'constants.js')) as { FOCUS_WAIT_MS: number }).FOCUS_WAIT_MS = 0;
+  const constants = require(path.join(OUT_DIR, 'constants.js')) as { FOCUS_WAIT_MS: number; PASTE_CHECK_MS: number };
+  constants.FOCUS_WAIT_MS = 0;
+  constants.PASTE_CHECK_MS = 0;
   const context = { subscriptions: [] as { dispose(): unknown }[] };
   ext.activate(context as never);
   const run = (id: string, ...args: unknown[]) => {

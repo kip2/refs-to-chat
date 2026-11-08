@@ -2,9 +2,9 @@
 
 /** コマンド ID */
 export const COMMANDS = {
-  sendSelection: 'rightClickMention.sendSelection',
-  sendCurrentFile: 'rightClickMention.sendCurrentFile',
-  sendFile: 'rightClickMention.sendFile',
+  sendSelection: 'refsToChat.sendSelection',
+  sendCurrentFile: 'refsToChat.sendCurrentFile',
+  sendFile: 'refsToChat.sendFile',
 } as const;
 
 /**
@@ -35,11 +35,17 @@ export const PASTE_COMMAND = 'editor.action.clipboardPasteAction';
  */
 export const FOCUS_WAIT_MS = 800;
 
-export const LOG_PREFIX = '[right-click-mention]';
+/**
+ * 貼り付けたあと、ファイルに入ってしまっていないかを見張る時間（ミリ秒）
+ * ファイルの変更は、貼り付けのコマンドが終わったあとに届くことがある
+ */
+export const PASTE_CHECK_MS = 150;
+
+export const LOG_PREFIX = '[refs-to-chat]';
 
 /** 設定（package.json の contributes.configuration と一致させる） */
 export const SETTINGS = {
-  section: 'rightClickMention',
-  /** エクスプローラーから送るファイルの入れ方 */
-  explorerFiles: 'explorerFiles',
+  section: 'refsToChat',
+  /** エクスプローラーから送るファイルで、クリップボードを使うか */
+  explorerClipboard: 'explorerClipboard',
 } as const;

@@ -2,7 +2,7 @@
 
 import * as vscode from 'vscode';
 import { insertMentionFor } from './claudeChat';
-import { explorerFileMode } from './config';
+import { explorerClipboard } from './config';
 import { deliverPendingReferences, type PendingReference } from './delivery';
 import { MESSAGES } from './messages';
 import { fileReference, folderReference } from './reference';
@@ -39,7 +39,7 @@ export async function addExplorerItemsToChat(
   }
 
   // 設定は 1 回だけ読み、途中で変わっても同じ入れ方で最後まで送る
-  const mode = explorerFileMode();
+  const clipboard = explorerClipboard();
   // チャットを開くと今のグループが変わるので、最初にユーザーが選んでいたグループを覚えておく
   const column = vscode.window.tabGroups.activeTabGroup.viewColumn;
 
@@ -49,7 +49,7 @@ export async function addExplorerItemsToChat(
   for (const uri of uris) {
     if (await isFolder(uri)) {
       pending.push({ ref: folderReference(workspacePath(uri)), reason: 'folder' });
-    } else if (mode === 'paste') {
+    } else if (clipboard === 'use') {
       pending.push({ ref: fileReference(workspacePath(uri)), reason: 'pasteFile' });
     } else {
       const notAdded = await addFileByOpening(uri, column);
@@ -61,7 +61,7 @@ export async function addExplorerItemsToChat(
 }
 
 /**
- * 設定 open のとき: ファイルを一瞬開いて、公式コマンドで入れる
+ * 設定 keep のとき: ファイルを一瞬開いて、公式コマンドで入れる
  * 入れられなかったら、まとめて届ける分として返す
  */
 async function addFileByOpening(uri: vscode.Uri, column: vscode.ViewColumn): Promise<PendingReference | undefined> {

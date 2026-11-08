@@ -1,0 +1,27 @@
+{
+  "name": "claude-code",
+  "displayName": "Fake Claude Code (test only)",
+  "description": "統合テスト専用の偽の公式拡張。Refs to Chat が呼ぶ公開コマンドだけを用意し、呼ばれた瞬間の状態を記録する",
+  "version": "0.0.0-test",
+  "publisher": "anthropic",
+  "private": true,
+  "engines": {
+    "vscode": "^1.94.0"
+  },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "claude-vscode.insertAtMention",
+        "title": "Fake Claude Code: Insert @-Mention Reference"
+      },
+      {
+        "command": "claude-vscode.focus",
+        "title": "Fake Claude Code: Focus input"
+      }
+    ]
+  }
+}
