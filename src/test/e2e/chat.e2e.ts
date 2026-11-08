@@ -298,7 +298,8 @@ describe('E2E: 本物の VS Code と公式拡張', function () {
     });
 
     // 左: md（裏）と app.js（前面）、右: プレビューとチャットのタブ
-    // md を右のグループに一瞬開くことになる。VS Code 1.100 では、開いたタブが閉じずに残っていた
+    // md を右のグループに一瞬開くことになる
+    // VS Code 1.100 では、開いたタブが閉じずに残っていた
     it('チャットのタブがプレビューと同じグループにあり、元のファイルは左の裏にある → 右に一瞬開いたタブを閉じる', async function () {
       await vs().openFile(GUIDE_MD);
       await vs().openMarkdownPreview('side');

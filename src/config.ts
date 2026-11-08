@@ -10,12 +10,12 @@ import { SETTINGS } from './constants';
  */
 export type ClipboardUse = 'use' | 'keep';
 
-/** エクスプローラーから送るファイルで、クリップボードを使うか */
+/** エクスプローラーからファイルを追加するときに、クリップボードを使うか */
 export function explorerClipboard(): ClipboardUse {
   return readClipboardUse(SETTINGS.explorerClipboard);
 }
 
-/** Markdown のプレビューで選んだところを送るときに、クリップボードを使うか */
+/** Markdown のプレビューから追加するときに、クリップボードを使うか */
 export function previewClipboard(): ClipboardUse {
   return readClipboardUse(SETTINGS.previewClipboard);
 }

@@ -32,7 +32,10 @@ export const SECONDARY_SIDE_BAR = '.part.auxiliarybar';
 export const tabByName = (name: string) => `.editor-group-container .tab[data-resource-name="${name}"]`;
 export const activeTabByName = (name: string) => `${tabByName(name)}.active`;
 
-/** そのファイルのタブがあるエディタグループで、前面にあるタブ（aria-label の先頭がタブの名前。プレビューは「Preview guide.md」） */
+/**
+ * そのファイルのタブがあるエディタグループで、前面にあるタブ
+ * aria-label の先頭がタブの名前（Markdown のプレビューは「Preview guide.md」）
+ */
 export const frontTabInGroupOf = (name: string) =>
   `.editor-group-container:has(.tab[data-resource-name="${name}"]) .tab.active`;
 

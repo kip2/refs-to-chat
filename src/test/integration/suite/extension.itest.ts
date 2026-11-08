@@ -147,6 +147,7 @@ describe('Refs to Chat（実 VS Code・マルチルート）', function () {
       const uri = fileIn('alpha', 'binary.bin');
       await vscode.commands.executeCommand('refsToChat.sendFile', uri, [uri]);
       assert.strictEqual(await clipboard(), '@alpha/binary.bin');
+      assert.strictEqual(hasTab(uri), false);
     });
 
     it('フォルダ → 本物のファイルシステムでフォルダと判定し、@folder/ をコピー', async function () {

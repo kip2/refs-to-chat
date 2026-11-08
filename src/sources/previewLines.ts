@@ -76,11 +76,11 @@ export function previewLineRange(selection: PreviewSelection, lines: readonly st
 /** プレビューの中の位置を、元のファイルの行にする */
 function sourceLine(point: PreviewPoint, lines: readonly string[]): number | undefined {
   if (point.line >= lines.length) return undefined;
-  // フェンス（```）のコードブロックは、data-line がフェンスの行を指すので、中身は次の行から
+  // フェンス（``` か ~~~）のコードブロックは、data-line がフェンスの行を指すので、中身は次の行から
   // インデントのコードブロックは、data-line が中身の 1 行目を指す
-  const fence = point.code && FENCE.test(lines[point.line]) ? 1 : 0;
+  const fenceOffset = point.code && FENCE.test(lines[point.line]) ? 1 : 0;
   // 改行の数え違いがあっても、ファイルの外は指さない
-  return Math.min(point.line + fence + point.newlines, lines.length - 1);
+  return Math.min(point.line + fenceOffset + point.newlines, lines.length - 1);
 }
 
 /** フェンスのコードブロックの始まりの行（CommonMark: 3 つまでの空白 + ``` か ~~~ を 3 つ以上） */

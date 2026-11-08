@@ -1,4 +1,4 @@
-// コマンドの登録と、送信・フォールバックの分岐のテスト
+// 右クリックのコマンド（addToChat）の登録と、送信・フォールバックの分岐のテスト
 
 import * as assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
@@ -79,7 +79,7 @@ describe('エディタからの送信（sendSelection / sendCurrentFile）', () 
     await run('refsToChat.sendSelection');
     assert.deepEqual(state.executed, []);
     assert.equal(state.clipboard, '');
-    assert.equal(state.infos.length, 1);
+    assert.deepEqual(state.infos, [MESSAGES.noEditor]);
   });
 
   it('公式拡張がない → 公式コマンドは呼ばずクリップボードへ', async () => {
@@ -363,7 +363,7 @@ describe('エクスプローラーからの送信（sendFile）', () => {
     assert.deepEqual(state.infos, []);
   });
 
-  it('理由が違うものが混ざっても、コピーも警告も 1 回で、理由は全部書く', async () => {
+  it('入れ方が違うもの（公式コマンド・貼り付け・開けない）が混ざっても、公式拡張がなければ、コピーも警告も 1 回', async () => {
     const SRC = uri('/ws/project/src');
     const { state, run } = setupOpen({
       claudeInstalled: false,
@@ -701,13 +701,17 @@ describe('エクスプローラーから送るファイル（設定 use・初期
     });
   });
 
-  it('エディタの右クリックは、設定に関係なく公式コマンドで入れる', async () => {
-    const { vscode, state, run } = setup({ settings: { 'refsToChat.explorerClipboard': 'use' } });
-    vscode.window.activeTextEditor = makeEditor('/ws/project/a.js', makeSelection(1, 0, 3, 2));
-    await run('refsToChat.sendSelection');
-    assert.deepEqual(state.executed, [FOCUS, CMD]);
-    assert.deepEqual(state.clipboardWrites, []);
-  });
+  for (const value of ['use', 'keep']) {
+    it(`エディタの右クリックは、設定に関係なく公式コマンドで入れる（設定 ${value}）`, async () => {
+      const { vscode, state, run } = setup({
+        settings: { 'refsToChat.explorerClipboard': value, 'refsToChat.previewClipboard': value },
+      });
+      vscode.window.activeTextEditor = makeEditor('/ws/project/a.js', makeSelection(1, 0, 3, 2));
+      await run('refsToChat.sendSelection');
+      assert.deepEqual(state.executed, [FOCUS, CMD]);
+      assert.deepEqual(state.clipboardWrites, []);
+    });
+  }
 });
 
 describe('エクスプローラーから送るときの細かい動き', () => {

@@ -47,10 +47,10 @@ export const LOG_PREFIX = '[refs-to-chat]';
 /** 設定（package.json の contributes.configuration と一致させる） */
 export const SETTINGS = {
   section: 'refsToChat',
-  /** エクスプローラーから送るファイルで、クリップボードを使うか */
+  /** エクスプローラーからファイルを追加するときに、クリップボードを使うか */
   explorerClipboard: 'explorerClipboard',
   /** Markdown のプレビューの右クリックメニューに出すか（package.json の when で使うだけ） */
   markdownPreview: 'markdownPreview',
-  /** Markdown のプレビューで選んだところを送るときに、クリップボードを使うか */
+  /** Markdown のプレビューから追加するときに、クリップボードを使うか */
   previewClipboard: 'previewClipboard',
 } as const;

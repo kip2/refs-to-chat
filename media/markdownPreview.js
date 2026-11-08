@@ -52,7 +52,7 @@
   }
 
   /** 元のファイルの改行として数える文字か（整形のための改行は数えない） */
-  function counts(text, block) {
+  function isSourceText(text, block) {
     return closestBlock(text) === block && !LAYOUT_TAGS.has(text.parentElement.tagName);
   }
 
@@ -79,12 +79,12 @@
     const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
     for (let text = walker.nextNode(); text; text = walker.nextNode()) {
       if (text === node) {
-        if (counts(text, block)) newlines += countNewlines(text.data.slice(0, offset));
+        if (isSourceText(text, block)) newlines += countNewlines(text.data.slice(0, offset));
         break;
       }
       // その位置より後ろの文字に来たら終わり
       if (before.comparePoint(text, text.length) !== 0) break;
-      if (counts(text, block)) newlines += countNewlines(text.data);
+      if (isSourceText(text, block)) newlines += countNewlines(text.data);
     }
     return { line, newlines, code };
   }

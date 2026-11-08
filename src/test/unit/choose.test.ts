@@ -35,7 +35,9 @@ describe('chooseDelivery: 入れ方の組み合わせ', () => {
     });
   }
 
-  it('すべての kind と設定の組み合わせを表に書いている', () => {
-    assert.equal(TABLE.length, Object.keys(TARGETS).length * 2);
+  it('すべての kind と設定の組み合わせを、1 回ずつ表に書いている', () => {
+    const written = TABLE.map(([kind, clipboard]) => `${kind}・${clipboard}`).sort();
+    const all = Object.keys(TARGETS).flatMap((kind) => [`${kind}・use`, `${kind}・keep`]).sort();
+    assert.deepEqual(written, all);
   });
 });

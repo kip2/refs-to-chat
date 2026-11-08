@@ -151,7 +151,8 @@ export type PreviewTextPosition = readonly [selector: string, index: number, off
 
 /**
  * プレビューの中で文字を選び、右クリックする位置（フレームの中の座標）を返す関数
- * 引数は [from, to]。to が null なら選択を消して、from の位置を返す
+ * 引数は [from, to]
+ * to が null なら選択を消して、from の位置を返す
  * DOM の型を読み込まないので、プレビューの中で動かす文字列として書く
  */
 const SELECT_IN_PREVIEW = `([from, to]) => {
@@ -297,8 +298,8 @@ export class VSCode {
   }
 
   private quickInputRow(label: string): Locator {
-    const name = this.page.locator(S.QUICK_INPUT_LABEL, { hasText: exactly(label) });
-    return this.page.locator(S.QUICK_INPUT_ROW).filter({ has: name }).first();
+    const labelCell = this.page.locator(S.QUICK_INPUT_LABEL, { hasText: exactly(label) });
+    return this.page.locator(S.QUICK_INPUT_ROW).filter({ has: labelCell }).first();
   }
 
   /** 候補をクリックして、入力欄が閉じるまで待つ */
@@ -434,7 +435,7 @@ export class VSCode {
     );
   }
 
-  /** 名前（aria-label の先頭）が一致するタブをクリックして、前面に出す */
+  /** 表示されている文字（タブの名前）が一致するタブをクリックして、前面に出す */
   async clickTab(label: string): Promise<void> {
     await this.page.locator(S.ANY_TAB, { hasText: exactly(label) }).first().click();
   }
@@ -534,7 +535,8 @@ export class VSCode {
   /**
    * 前面の Markdown ファイルのプレビューを開き、プレビューの中身が出るまで待つ
    * 開き方でプレビューの webviewId が違う（VS Code 1.145 で確かめた）
-   * - shortcut: Ctrl+Shift+V（vscode.markdown.preview.editor）。エディタにフォーカスがあること（openFile のあと）が前提
+   * - shortcut: Ctrl+Shift+V（vscode.markdown.preview.editor）
+   *   エディタにフォーカスがあること（openFile のあと）が前提
    * - palette: コマンドパレットの「Markdown: Open Preview」（markdown.preview）
    * - side: コマンドパレットの「Markdown: Open Preview to the Side」（markdown.preview）
    */

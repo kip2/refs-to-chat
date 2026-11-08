@@ -73,7 +73,7 @@ export async function openForMention(
 
     const editor = await vscode.window.showTextDocument(document, {
       viewColumn: group.viewColumn,
-      // プレビューで開くと、ユーザーがプレビューで開いていた別のタブを置き換えて消してしまう
+      // 仮のタブ（斜体）で開くと、ユーザーが仮のタブで開いていた別のファイルを置き換えて消してしまう
       preview: false,
       preserveFocus: false,
     });
@@ -135,10 +135,10 @@ export function columnShowing(uri: vscode.Uri, fallback: vscode.ViewColumn): vsc
  * 出せなくても、参照を届ける処理は続ける
  */
 async function showPreviousTab(viewColumn: vscode.ViewColumn): Promise<void> {
-  const focusGroup = FOCUS_GROUP_COMMANDS[viewColumn - 1];
-  if (!focusGroup) return;
+  const focusCommand = FOCUS_GROUP_COMMANDS[viewColumn - 1];
+  if (!focusCommand) return;
   try {
-    await vscode.commands.executeCommand(focusGroup);
+    await vscode.commands.executeCommand(focusCommand);
     await vscode.commands.executeCommand(OPEN_PREVIOUS_IN_GROUP_COMMAND);
   } catch (err) {
     console.error(LOG_PREFIX, err);

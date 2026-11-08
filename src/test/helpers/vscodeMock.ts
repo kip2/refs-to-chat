@@ -140,7 +140,7 @@ export interface MockOptions {
   chatInEditorTab?: boolean;
   /** チャットのタブがあるエディタグループ（chatInEditorTab のとき、チャットを開くとこのグループが今のグループになる） */
   chatColumn?: number;
-  /** openTextDocument で開いたファイルの中身（パス → 文字列。なければ空） */
+  /** openTextDocument で開いたファイルの中身（パス → 文字列、なければ空） */
   documentText?: Record<string, string>;
   /** 設定（例: `{ 'refsToChat.explorerClipboard': 'keep' }`） */
   settings?: Record<string, unknown>;
@@ -228,7 +228,8 @@ export function createVscodeMock(opts: MockOptions = {}) {
   };
   state.front.set(1, state.tabs[state.tabs.length - 1]);
   state.front.set(2, state.otherTabs[state.otherTabs.length - 1]);
-  // グループごとに、前面に出た順（最後が今の前面）。最初は、タブの並び順に使ったものとする
+  // グループごとに、前面に出た順（最後が今の前面）
+  // 最初は、タブの並び順に使ったものとする
   const used = new Map<number, MockTab[]>([
     [1, [...state.tabs]],
     [2, [...state.otherTabs]],
@@ -261,7 +262,7 @@ export function createVscodeMock(opts: MockOptions = {}) {
       parse(value: string, strict?: boolean): MockUri {
         const m = /^file:\/\/(.*)$/.exec(value);
         if (!m) {
-          if (strict) throw new Error(`[UriError]: Scheme is missing: ${value}`);
+          if (strict) throw new Error(`モックの Uri.parse は file:// の URI だけを読む: ${value}`);
           return uri(value);
         }
         return uri(decodeURIComponent(m[1]));
