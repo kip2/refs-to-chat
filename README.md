@@ -1,6 +1,7 @@
 # Refs to Chat
 
 右クリックで、選択範囲・ファイル・フォルダの参照（`@src/app.ts#5-10` など）を、Claude のチャットに追加する VS Code 拡張です。
+
 [Claude Code](https://www.anthropic.com/claude-code) の公式の VS Code 拡張（この README では「公式拡張」と呼びます）と一緒に使います。
 
 > 個人が作った非公式の拡張です。Anthropic とは関係ありません。
