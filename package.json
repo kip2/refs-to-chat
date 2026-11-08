@@ -77,9 +77,26 @@
           "default": "use",
           "scope": "window",
           "markdownDescription": "エクスプローラーから「Claudeのチャットに追加」したときに、クリップボードを使うかどうかを選びます。`keep` にしても、フォルダ、画像などテキストとして開けないファイル、チャットに追加できなかったときは、クリップボードを使います（元の中身は戻りません）。"
+        },
+        "refsToChat.previewClipboard": {
+          "type": "string",
+          "enum": [
+            "use",
+            "keep"
+          ],
+          "enumDescriptions": [
+            "クリップボードを使う。元のファイルを開かずに入れる。クリップボードの中身は書き換わる",
+            "クリップボードを使わない。かわりに、元のファイルのタブが一瞬開いて閉じる"
+          ],
+          "default": "use",
+          "scope": "window",
+          "markdownDescription": "Markdown のプレビューから「選択範囲をClaudeのチャットに追加」したときに、クリップボードを使うかどうかを選びます。`keep` にしても、チャットに追加できなかったときは、クリップボードを使います（元の中身は戻りません）。"
         }
       }
     },
+    "markdown.previewScripts": [
+      "./media/markdownPreview.js"
+    ],
     "commands": [
       {
         "command": "refsToChat.sendSelection",
@@ -94,6 +111,11 @@
       {
         "command": "refsToChat.sendFile",
         "title": "Claudeのチャットに追加",
+        "category": "Refs to Chat"
+      },
+      {
+        "command": "refsToChat.sendPreviewSelection",
+        "title": "選択範囲をClaudeのチャットに追加",
         "category": "Refs to Chat"
       }
     ],
@@ -117,6 +139,13 @@
           "group": "navigation@100"
         }
       ],
+      "webview/context": [
+        {
+          "command": "refsToChat.sendPreviewSelection",
+          "when": "(webviewId == 'markdown.preview' || webviewId == 'vscode.markdown.preview.editor') && refsToChatPreviewSelection && !config.claudeCode.useTerminal",
+          "group": "navigation@100"
+        }
+      ],
       "commandPalette": [
         {
           "command": "refsToChat.sendSelection",
@@ -128,6 +157,10 @@
         },
         {
           "command": "refsToChat.sendFile",
+          "when": "false"
+        },
+        {
+          "command": "refsToChat.sendPreviewSelection",
           "when": "false"
         }
       ]

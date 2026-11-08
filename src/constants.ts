@@ -5,6 +5,7 @@ export const COMMANDS = {
   sendSelection: 'refsToChat.sendSelection',
   sendCurrentFile: 'refsToChat.sendCurrentFile',
   sendFile: 'refsToChat.sendFile',
+  sendPreviewSelection: 'refsToChat.sendPreviewSelection',
 } as const;
 
 /**
@@ -48,4 +49,6 @@ export const SETTINGS = {
   section: 'refsToChat',
   /** エクスプローラーから送るファイルで、クリップボードを使うか */
   explorerClipboard: 'explorerClipboard',
+  /** Markdown のプレビューで選んだところを送るときに、クリップボードを使うか */
+  previewClipboard: 'previewClipboard',
 } as const;

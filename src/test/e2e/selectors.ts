@@ -22,9 +22,19 @@ export const CONTEXT_MENU_ITEM = '.context-view .monaco-menu:visible .action-lab
 export const ACTIVE_EDITOR_TEXT = '.editor-group-container.active .monaco-editor .view-lines';
 export const ACTIVE_EDITOR_FOCUSED = '.editor-group-container.active .monaco-editor.focused';
 
+/** エディタのタブ（チャットやプレビューのタブも含む） */
+export const ANY_TAB = '.editor-group-container .tab';
+
+/** 右のサイドバー（閉じているときは見えない） */
+export const SECONDARY_SIDE_BAR = '.part.auxiliarybar';
+
 /** エディタのタブ（data-resource-name はファイル名だけ） */
 export const tabByName = (name: string) => `.editor-group-container .tab[data-resource-name="${name}"]`;
 export const activeTabByName = (name: string) => `${tabByName(name)}.active`;
+
+/** そのファイルのタブがあるエディタグループで、前面にあるタブ（aria-label の先頭がタブの名前。プレビューは「Preview guide.md」） */
+export const frontTabInGroupOf = (name: string) =>
+  `.editor-group-container:has(.tab[data-resource-name="${name}"]) .tab.active`;
 
 /** そのファイルのタブが前面にあるエディタグループの、テキストのエディタの本文 */
 export const editorTextByName = (name: string) =>
@@ -49,6 +59,19 @@ export const CLAUDE_OPEN_IN_NEW_TAB = 'Claude Code: Open in New Tab';
 /** VS Code のコマンドの、コマンドパレットでの名前 */
 export const CLOSE_ALL_EDITORS = 'View: Close All Editors';
 export const FOCUS_ACTIVE_EDITOR_GROUP = 'View: Focus Active Editor Group';
+export const FOCUS_FIRST_EDITOR_GROUP = 'View: Focus First Editor Group';
+export const MOVE_EDITOR_TO_PREVIOUS_GROUP = 'View: Move Editor into Previous Group';
 export const SHOW_EXPLORER = 'View: Show Explorer';
 export const HIDE_SECONDARY_SIDE_BAR = 'View: Hide Secondary Side Bar';
 export const CLEAR_NOTIFICATIONS = 'Notifications: Clear All Notifications';
+export const REOPEN_WITH_TEXT_EDITOR = 'View: Reopen Editor with Text Editor';
+
+/**
+ * 組み込みの Markdown プレビューの中にある、プレビューの設定の要素
+ * これがある Webview の中身を、プレビューとして扱う
+ */
+export const MARKDOWN_PREVIEW_DATA = '#vscode-markdown-preview-data';
+
+/** 組み込みの Markdown 拡張のコマンドの、コマンドパレットでの名前 */
+export const MARKDOWN_OPEN_PREVIEW = 'Markdown: Open Preview';
+export const MARKDOWN_OPEN_PREVIEW_TO_SIDE = 'Markdown: Open Preview to the Side';

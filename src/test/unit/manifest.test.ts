@@ -6,6 +6,7 @@ import { describe, it } from 'node:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { CLAUDE, COMMANDS, SETTINGS } from '../../constants';
+import { PREVIEW_CONTEXT_KEY } from '../../sources/previewLines';
 import { setup } from '../helpers/vscodeMock';
 
 interface MenuItem {
@@ -24,6 +25,7 @@ interface Manifest {
   capabilities: { untrustedWorkspaces: { supported: boolean } };
   extensionKind?: string[];
   contributes: {
+    'markdown.previewScripts'?: string[];
     commands: { command: string; title: string; category?: string }[];
     menus: Record<string, MenuItem[]>;
     configuration?: {
@@ -87,6 +89,7 @@ describe('メニューの表示条件', () => {
   const editor = menus['editor/context'];
   const explorer = menus['explorer/context'];
   const palette = menus.commandPalette;
+  const webview = menus['webview/context'];
 
   /** メニューの中から、そのコマンドの when を取り出す（なければテストを失敗させる） */
   function whenOf(items: MenuItem[], command: string): string {
@@ -117,7 +120,21 @@ describe('メニューの表示条件', () => {
   });
 
   it('右クリックメニューはすべてターミナル版の設定では出さない', () => {
-    for (const m of [...editor, ...explorer]) assert.ok(m.when?.includes(TERMINAL_GUARD), m.command);
+    for (const m of [...editor, ...explorer, ...webview]) assert.ok(m.when?.includes(TERMINAL_GUARD), m.command);
+  });
+
+  // 組み込みの Markdown プレビューの webviewId は、開き方で違う（VS Code 1.145 で確かめた）
+  // Ctrl+Shift+V: vscode.markdown.preview.editor / Ctrl+K V（横に開く）: markdown.preview
+  it('Markdown のプレビュー: どちらの開き方でも、選択があるときだけ出す', () => {
+    assert.equal(webview.length, 1);
+    const when = whenOf(webview, COMMANDS.sendPreviewSelection);
+    assert.match(when, /webviewId == 'markdown\.preview'/);
+    assert.match(when, /webviewId == 'vscode\.markdown\.preview\.editor'/);
+    assert.match(when, new RegExp(`&& ${PREVIEW_CONTEXT_KEY} &&`));
+  });
+
+  it('sendPreviewSelection はプレビューの選択を引数で受け取るのでコマンドパレットに出さない', () => {
+    assert.equal(whenOf(palette, COMMANDS.sendPreviewSelection), 'false');
   });
 
   it('sendFile は引数（URI）が必要なのでコマンドパレットに出さない', () => {
@@ -133,7 +150,21 @@ describe('メニューの表示条件', () => {
   });
 
   it('右クリックメニューは navigation グループ', () => {
-    for (const m of [...editor, ...explorer]) assert.match(m.group ?? '', /^navigation/);
+    for (const m of [...editor, ...explorer, ...webview]) assert.match(m.group ?? '', /^navigation/);
+  });
+});
+
+describe('Markdown のプレビューに読み込むスクリプト', () => {
+  const scripts = pkg.contributes['markdown.previewScripts'] ?? [];
+
+  it('1 つだけ宣言していて、ファイルがある', () => {
+    assert.equal(scripts.length, 1);
+    assert.ok(fs.existsSync(path.join(ROOT, scripts[0])), scripts[0]);
+  });
+
+  it('メニューの when とコマンドが見るキーと、スクリプトが入れるキーが同じ', () => {
+    const script = fs.readFileSync(path.join(ROOT, scripts[0]), 'utf8');
+    assert.ok(script.includes(`const KEY = '${PREVIEW_CONTEXT_KEY}';`));
   });
 });
 
@@ -149,6 +180,14 @@ describe('設定の宣言', () => {
     assert.deepEqual(prop?.enum, ['use', 'keep']);
     assert.equal(prop?.default, 'use');
     assert.equal(prop?.enumDescriptions?.length, 2);
+  });
+
+  it('プレビューで選んだところでクリップボードを使うかの設定も、同じ名前で、選べるのは use と keep、初期設定は use', () => {
+    const preview = pkg.contributes.configuration?.properties[`${SETTINGS.section}.${SETTINGS.previewClipboard}`];
+    assert.ok(preview, 'previewClipboard が package.json にない');
+    assert.deepEqual(preview.enum, ['use', 'keep']);
+    assert.equal(preview.default, 'use');
+    assert.equal(preview.enumDescriptions?.length, 2);
   });
 
   it('設定画面の見出しは拡張の名前', () => {

@@ -11,7 +11,8 @@ import {
   CLAUDE_FOCUS_INPUT,
   CLAUDE_OPEN_IN_NEW_TAB,
   CLAUDE_OPEN_IN_SIDE_BAR,
-  HIDE_SECONDARY_SIDE_BAR,
+  FOCUS_FIRST_EDITOR_GROUP,
+  MOVE_EDITOR_TO_PREVIOUS_GROUP,
 } from './selectors';
 import { VSCode } from './vscode';
 
@@ -29,6 +30,7 @@ const PALETTE = {
 const APP_JS = fixture('alpha/src/app.js');
 const ONLY_IN_BETA = fixture('beta/src/only-in-beta.js');
 const ALPHA_SRC = fixture('alpha/src');
+const GUIDE_MD = fixture('alpha/docs/guide.md');
 
 const LOGIN_MESSAGE =
   '公式拡張のチャットの入力欄が出てきません。ログインしていない可能性があります。' +
@@ -62,10 +64,13 @@ describe('E2E: 本物の VS Code と公式拡張', function () {
   });
 
   beforeEach(async function () {
+    // 前のテストで使ったチャットが、フォーカスを取り返し終わるのを待ってから、画面を操作する
+    await vs().waitForChatToSettle();
     await vs().setSetting('refsToChat.explorerClipboard', undefined);
+    await vs().setSetting('refsToChat.previewClipboard', undefined);
     // チャットを閉じた状態から始める（エディタのタブのチャットも、サイドバーのチャットも閉じる）
     await vs().closeAllEditors();
-    await vs().runCommandIfListed(HIDE_SECONDARY_SIDE_BAR);
+    await vs().hideSecondarySideBar();
     await vs().clearNotifications();
   });
 
@@ -89,6 +94,7 @@ describe('E2E: 本物の VS Code と公式拡張', function () {
     try {
       await code.clearChat().catch((err: unknown) => console.error('チャットの入力欄を空にできませんでした', err));
       await code.setSetting('refsToChat.explorerClipboard', undefined).catch(() => undefined);
+      await code.setSetting('refsToChat.previewClipboard', undefined).catch(() => undefined);
       await code.setSetting('claudeCode.useTerminal', undefined).catch(() => undefined);
     } finally {
       await code.close();
@@ -222,6 +228,95 @@ describe('E2E: 本物の VS Code と公式拡張', function () {
     });
   });
 
+  // GUIDE_MD の行: 3〜5 が段落、7〜8 がリスト、10〜13 がコードブロック（10 と 13 は ```）
+  // プレビューは開き方で webviewId が違うので、Ctrl+Shift+V と、横に開くものの両方で確かめる
+  describe('Markdown のプレビューから追加する', function () {
+    it('Ctrl+Shift+V のプレビューで、段落の 2 行目の途中だけを選ぶ → その行の参照が貼り付けで入る', async function () {
+      await vs().openFile(GUIDE_MD);
+      await vs().openMarkdownPreview('shortcut');
+      const items = await vs().rightClickPreview(['p', 0, 30], ['p', 0, 40]);
+      assert.ok(items.includes(MENU.selection), `メニューに「${MENU.selection}」がない: ${items.join(', ')}`);
+      await vs().clickMenuItem(MENU.selection);
+      const text = await expectInChat('@alpha/docs/guide.md#4');
+      assert.match(text, /@alpha\/docs\/guide\.md#4(?![-\d])/);
+    });
+
+    it('横に開いたプレビューで、リストからコードブロックの中まで選ぶ → 範囲の参照が入る', async function () {
+      await vs().openFile(GUIDE_MD);
+      await vs().openMarkdownPreview('side');
+      await vs().rightClickPreview(['li', 1, 0], ['code', 0, 15]);
+      await vs().clickMenuItem(MENU.selection);
+      await expectInChat('@alpha/docs/guide.md#8-12');
+    });
+
+    it('何も選ばずに右クリック → メニューに出ない', async function () {
+      await vs().openFile(GUIDE_MD);
+      await vs().openMarkdownPreview('palette');
+      const items = await vs().rightClickPreview(['p', 0, 3]);
+      await vs().closeMenu();
+      assert.ok(!items.includes(MENU.selection), items.join(', '));
+    });
+  });
+
+  describe('Markdown のプレビューから追加する（設定 keep）', function () {
+    beforeEach(async function () {
+      await vs().setSetting('refsToChat.previewClipboard', 'keep');
+    });
+
+    it('Ctrl+Shift+V のプレビュー → 元のファイルを一瞬開いて入れ、開いたタブは閉じる', async function () {
+      await vs().openFile(GUIDE_MD);
+      await vs().openMarkdownPreview('shortcut');
+      const tabs = await vs().tabCount('guide.md');
+      await vs().rightClickPreview(['p', 0, 30], ['p', 0, 40]);
+      await vs().clickMenuItem(MENU.selection);
+      const text = await expectInChat('@alpha/docs/guide.md#4');
+      assert.match(text, /@alpha\/docs\/guide\.md#4(?![-\d])/);
+      assert.strictEqual(await vs().waitForTabCount('guide.md', tabs), tabs, 'タブの数が元に戻らない');
+    });
+
+    it('横に開いたプレビュー → 横に表示している元のファイルで入れ、タブは増えない', async function () {
+      await vs().openFile(GUIDE_MD);
+      await vs().openMarkdownPreview('side');
+      const tabs = await vs().tabCount('guide.md');
+      await vs().rightClickPreview(['li', 1, 0], ['code', 0, 15]);
+      await vs().clickMenuItem(MENU.selection);
+      await expectInChat('@alpha/docs/guide.md#8-12');
+      assert.strictEqual(await vs().waitForTabCount('guide.md', tabs), tabs, 'タブの数が変わった');
+    });
+
+    // 左: md（裏）と app.js（前面）、右: プレビューとチャットのタブ
+    // md を右のグループに一瞬開くことになる。VS Code 1.100 では、開いたタブが閉じずに残っていた
+    it('チャットのタブがプレビューと同じグループにあり、元のファイルは左の裏にある → 右に一瞬開いたタブを閉じる', async function () {
+      await vs().openFile(GUIDE_MD);
+      await vs().openMarkdownPreview('side');
+      await vs().runCommand(CLAUDE_OPEN_IN_NEW_TAB);
+      assert.ok(await vs().waitForChatInput(), 'チャットが開かない');
+      await vs().waitForChatToSettle();
+      await vs().runCommand(MOVE_EDITOR_TO_PREVIOUS_GROUP);
+      await vs().runCommand(FOCUS_FIRST_EDITOR_GROUP);
+      await vs().openFile(APP_JS);
+      await vs().clickTab('Preview guide.md');
+      const tabs = await vs().tabCount('guide.md');
+      await vs().rightClickPreview(['p', 0, 30], ['p', 0, 40]);
+      await vs().clickMenuItem(MENU.selection);
+      await expectInChat('@alpha/docs/guide.md#4');
+      assert.strictEqual(await vs().waitForTabCount('guide.md', tabs), tabs, '右に開いた md のタブが残っている');
+    });
+
+    // md のタブが同じグループの裏に回る（前面にあったプレビューを、入れたあとで前面に戻す）
+    it('同じグループに別のタブで開いたプレビュー → 入れたあと、プレビューが前面に戻る', async function () {
+      await vs().openFile(GUIDE_MD);
+      await vs().openMarkdownPreview('palette');
+      const before = await vs().frontTabName('guide.md');
+      assert.strictEqual(before, 'Preview guide.md', 'プレビューが前面にない（テストの前提が崩れている）');
+      await vs().rightClickPreview(['p', 0, 30], ['p', 0, 40]);
+      await vs().clickMenuItem(MENU.selection);
+      await expectInChat('@alpha/docs/guide.md#4');
+      const after = await vs().waitForFrontTabName('guide.md', before);
+      assert.strictEqual(after, before, `前面のタブが戻らない（前: ${before}）`);
+    });
+  });
+
   describe('ターミナル版の設定（claudeCode.useTerminal）', function () {
     afterEach(async function () {
       await vs().setSetting('claudeCode.useTerminal', undefined);
@@ -251,7 +346,7 @@ describe('E2E: 本物の VS Code と公式拡張', function () {
     after(async function () {
       // サイドバーで開くと、公式拡張の設定 preferredLocation が sidebar に変わるので戻す
       await vs().setSetting('claudeCode.preferredLocation', 'panel');
-      await vs().runCommandIfListed(HIDE_SECONDARY_SIDE_BAR);
+      await vs().hideSecondarySideBar();
     });
 
     it('数行を選んで右クリック → 行番号付きで入る', async function () {

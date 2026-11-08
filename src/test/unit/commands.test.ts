@@ -10,7 +10,7 @@ import { makeEditor, makeSelection, type MockOptions, setup, uri } from '../help
 const CMD = 'claude-vscode.insertAtMention';
 const FOCUS = 'claude-vscode.focus';
 const PASTE = 'editor.action.clipboardPasteAction';
-const IDS = ['refsToChat.sendSelection', 'refsToChat.sendCurrentFile', 'refsToChat.sendFile'];
+const IDS = ['refsToChat.sendSelection', 'refsToChat.sendCurrentFile', 'refsToChat.sendFile', 'refsToChat.sendPreviewSelection'];
 
 // クリップボードを使わず、ファイルを一瞬開いて公式コマンドで入れる設定（keep）で動かす
 // 初期設定はクリップボードから貼り付ける（use）ので、開く動きを確かめるテストはこれを使う
@@ -28,10 +28,10 @@ afterEach(() => {
 });
 
 describe('activate / deactivate', () => {
-  it('3つのコマンドを登録し、すべて subscriptions に入れる', () => {
+  it('4つのコマンドを登録し、すべて subscriptions に入れる', () => {
     const { state, context } = setup();
     assert.deepEqual([...state.registered.keys()].sort(), [...IDS].sort());
-    assert.equal(context.subscriptions.length, 3);
+    assert.equal(context.subscriptions.length, 4);
   });
 
   it('subscriptions を dispose するとコマンドが解除される', () => {
@@ -510,6 +510,30 @@ describe('エクスプローラーから送るときに開いたタブ', () => {
     assert.deepEqual(editor.selections, [sel]);
   });
 
+  it('もともと開いていたが裏にあったタブは、閉じずに、入れたあとで前面にあったタブを戻す', async () => {
+    const { state, run } = setupOpen({ openTabs: ['/ws/project/a.js', '/ws/project/b.js'] });
+    await run('refsToChat.sendFile', A);
+    assert.deepEqual(state.closed, []);
+    assert.equal(state.front.get(1)?.input.uri.fsPath, '/ws/project/b.js');
+    // そのグループにフォーカスを移してから、直前に使ったエディタを開く（Webview のタブも戻せるように）
+    assert.deepEqual(state.executed, [
+      FOCUS,
+      CMD,
+      'workbench.action.focusFirstEditorGroup',
+      'workbench.action.openPreviousRecentlyUsedEditorInGroup',
+    ]);
+  });
+
+  it('もともと前面にあったタブなら、ほかのタブを前面に出し直さない', async () => {
+    const { state, run } = setupOpen({ openTabs: ['/ws/project/b.js', '/ws/project/a.js'] });
+    await run('refsToChat.sendFile', A);
+    assert.deepEqual(
+      state.shown.map((s) => s.fsPath),
+      ['/ws/project/a.js'],
+    );
+    assert.equal(state.front.get(1)?.input.uri.fsPath, '/ws/project/a.js');
+  });
+
   it('公式コマンドを呼ぶときは、カーソル位置で選択を空にしている（先頭に飛ばさない）', async () => {
     const seen: { empty: boolean; line: number }[] = [];
     const ctx: { vscode?: ReturnType<typeof setup>['vscode'] } = {};
@@ -838,5 +862,154 @@ describe('Remote（公式拡張がリモート側にある）', () => {
     await run('refsToChat.sendFile', A);
     assert.deepEqual(state.executed, []);
     assert.ok(state.warnings[0].includes(R.notInstalled));
+  });
+});
+
+describe('Markdown のプレビューからの送信（sendPreviewSelection）', () => {
+  const ID = 'refsToChat.sendPreviewSelection';
+  const GUIDE = '/ws/project/docs/guide.md';
+  const TEXT = ['# Title', '', 'line A', 'line B', '', '```js', 'code 1', 'code 2', '```'].join('\n');
+  const point = (line: number, newlines = 0, code = false) => ({ line, newlines, code });
+  // プレビューのスクリプトが data-vscode-context に入れ、VS Code がコマンドの引数に渡すもの
+  const arg = (start: object, end: object, source = `file://${GUIDE}`) => ({
+    webview: 'vscode.markdown.preview.editor',
+    refsToChatPreviewSelection: { source, start, end },
+  });
+  const opts = { documentText: { [GUIDE]: TEXT } };
+
+  it('元のファイルを開かずに、行の参照を作って貼り付けで入れる', async () => {
+    const { state, run } = setup(opts);
+    await run(ID, arg(point(2), point(2, 1)));
+    assert.deepEqual(state.shown, []);
+    assert.deepEqual(state.executed, [FOCUS, PASTE]);
+    assert.deepEqual(state.clipboardWrites, ['@docs/guide.md#3-4 ']);
+    assert.deepEqual(state.warnings, []);
+    assert.deepEqual(state.infos, []);
+  });
+
+  it('フェンスのコードブロックは、フェンスの次の行から数える', async () => {
+    const { state, run } = setup(opts);
+    await run(ID, arg(point(5, 1, true), point(5, 1, true)));
+    assert.deepEqual(state.clipboardWrites, ['@docs/guide.md#8 ']);
+  });
+
+  it('マルチルートでは、先頭にフォルダ名が付く', async () => {
+    const file = '/ws/beta/README.md';
+    const { state, run } = setup({ workspaceFolders: ['/ws/alpha', '/ws/beta'], documentText: { [file]: 'a\nb' } });
+    await run(ID, arg(point(0), point(1), `file://${file}`));
+    assert.deepEqual(state.clipboardWrites, ['@beta/README.md#1-2 ']);
+  });
+
+  it('公式拡張がない → 貼り付けずにコピーして警告', async () => {
+    const { state, run } = setup({ ...opts, claudeInstalled: false });
+    await run(ID, arg(point(2), point(2)));
+    assert.deepEqual(state.executed, []);
+    assert.deepEqual(state.clipboardWrites, ['@docs/guide.md#3']);
+    assert.ok(state.warnings[0].includes(R.notInstalled));
+  });
+
+  for (const [name, bad] of [
+    ['引数がない（キーボードショートカットなどから）', undefined],
+    ['プレビューの値がない（選択なし）', { webview: 'markdown.preview' }],
+    ['行が数でない', arg({ line: '2', newlines: 0, code: false }, point(2))],
+    ['URI がない', arg(point(2), point(2), '')],
+  ] as const) {
+    it(`${name} → 案内を出して何もしない`, async () => {
+      const { state, run } = setup(opts);
+      await run(ID, bad);
+      assert.deepEqual(state.executed, []);
+      assert.deepEqual(state.clipboardWrites, []);
+      assert.deepEqual(state.infos, [MESSAGES.noPreviewSelection]);
+    });
+  }
+
+  it('プレビューの行が元のファイルに収まらない → 案内を出して何もしない', async () => {
+    const { state, run } = setup(opts);
+    await run(ID, arg(point(2), point(40)));
+    assert.deepEqual(state.executed, []);
+    assert.deepEqual(state.infos, [MESSAGES.noPreviewSelection]);
+  });
+
+  it('元のファイルを読めない → 案内を出して何もしない', async () => {
+    const { state, run } = setup({ ...opts, isBinary: (p) => p === GUIDE });
+    await run(ID, arg(point(2), point(2)));
+    assert.deepEqual(state.executed, []);
+    assert.deepEqual(state.infos, [MESSAGES.noPreviewSelection]);
+  });
+});
+
+describe('Markdown のプレビューからの送信（設定 keep）', () => {
+  const ID = 'refsToChat.sendPreviewSelection';
+  const GUIDE = '/ws/project/docs/guide.md';
+  const TEXT = ['# Title', '', 'line A', 'line B', ''].join('\n');
+  const point = (line: number, newlines = 0) => ({ line, newlines, code: false });
+  // 3〜4 行目（0 始まりで 2〜3）を選んだときの引数
+  const ARG = { refsToChatPreviewSelection: { source: `file://${GUIDE}`, start: point(2), end: point(2, 1) } };
+  const setupKeep = (o: MockOptions = {}) =>
+    setup({
+      ...o,
+      documentText: { [GUIDE]: TEXT },
+      settings: { 'refsToChat.previewClipboard': 'keep', ...o.settings },
+    });
+
+  it('元のファイルを一瞬開き、その行を選んだ状態で公式コマンドを呼び、開いたタブを閉じる', async () => {
+    const seen: { file?: string; start: [number, number]; end: [number, number] }[] = [];
+    const ctx: { vscode?: ReturnType<typeof setup>['vscode'] } = {};
+    const { vscode, state, run } = setupKeep({
+      onExecute: (id) => {
+        const editor = ctx.vscode?.window.activeTextEditor;
+        if (id !== CMD || !editor) return;
+        const { start, end } = editor.selection;
+        seen.push({ file: editor.document.uri.fsPath, start: [start.line, start.character], end: [end.line, end.character] });
+      },
+    });
+    ctx.vscode = vscode;
+    await run(ID, ARG);
+    // 3 行目の先頭から 4 行目の末尾（"line B" の 6 文字）まで
+    assert.deepEqual(seen, [{ file: GUIDE, start: [2, 0], end: [3, 6] }]);
+    assert.deepEqual(state.executed, [FOCUS, CMD]);
+    assert.deepEqual(state.closed, [GUIDE]);
+    assert.deepEqual(state.clipboardWrites, []);
+    assert.deepEqual(state.warnings, []);
+  });
+
+  it('元のファイルを別のグループで表示していれば、そのグループで入れ、タブは閉じずに選択を戻す', async () => {
+    const original = makeSelection(0, 1, 0, 1);
+    const { vscode, state, run } = setupKeep({ otherGroupTabs: [GUIDE] });
+    const shownBefore = makeEditor(GUIDE, original);
+    shownBefore.viewColumn = 2;
+    vscode.window.activeTextEditor = shownBefore;
+    vscode.window.activeTextEditor = undefined;
+    await run(ID, ARG);
+    assert.equal(state.shown[0].options.viewColumn, 2);
+    assert.deepEqual(state.closed, []);
+    assert.deepEqual(state.editors.get(GUIDE)?.selections, [original]);
+  });
+
+  it('元のファイルのタブが今のグループの裏にあれば、閉じずに、前面にあったタブを戻す', async () => {
+    const APP = '/ws/project/src/app.js';
+    const { state, run } = setupKeep({ openTabs: [GUIDE, APP] });
+    await run(ID, ARG);
+    assert.deepEqual(state.closed, []);
+    assert.equal(state.front.get(1)?.input.uri.fsPath, APP);
+  });
+
+  it('公式コマンドが失敗 → 行の参照をコピーして警告', async () => {
+    const { state, run } = setupKeep({
+      onExecute: (id) => {
+        if (id === CMD) throw new Error('boom');
+      },
+    });
+    await run(ID, ARG);
+    assert.deepEqual(state.clipboardWrites, ['@docs/guide.md#3-4']);
+    assert.ok(state.warnings[0].includes(R.failed));
+    assert.deepEqual(state.closed, [GUIDE]);
+  });
+
+  it('知らない値が設定されていたら、初期設定の貼り付けとして扱う', async () => {
+    const { state, run } = setupKeep({ settings: { 'refsToChat.previewClipboard': 'unknown' } });
+    await run(ID, ARG);
+    assert.deepEqual(state.shown, []);
+    assert.deepEqual(state.executed, [FOCUS, PASTE]);
   });
 });

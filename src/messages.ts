@@ -12,6 +12,7 @@ export const REASON_MESSAGES = {
 export const MESSAGES = {
   noEditor: '開いているファイルがありません',
   noTarget: '追加するファイルやフォルダがありません',
+  noPreviewSelection: 'プレビューで選んだところを、元のファイルの行に直せませんでした',
   copied: (why: string, text: string) => `${why}。参照をクリップボードにコピーしました: ${text}`,
   unsafeName: (count: number) =>
     `ファイル名に改行などの特別な文字が入っているものが ${count} 件あったので、追加もコピーもしませんでした`,

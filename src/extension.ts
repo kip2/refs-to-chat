@@ -3,14 +3,18 @@
 // 各ファイルの役目は docs/ARCHITECTURE.md の 4 章を参照
 
 import * as vscode from 'vscode';
-import { addActiveEditorToChat, addExplorerItemsToChat } from './commands';
+import { addToChat } from './addToChat';
 import { COMMANDS } from './constants';
+import { editorSource } from './sources/editor';
+import { explorerSource } from './sources/explorer';
+import { markdownPreviewSource } from './sources/markdownPreview';
 
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand(COMMANDS.sendSelection, addActiveEditorToChat),
-    vscode.commands.registerCommand(COMMANDS.sendCurrentFile, addActiveEditorToChat),
-    vscode.commands.registerCommand(COMMANDS.sendFile, addExplorerItemsToChat),
+    vscode.commands.registerCommand(COMMANDS.sendSelection, addToChat(editorSource)),
+    vscode.commands.registerCommand(COMMANDS.sendCurrentFile, addToChat(editorSource)),
+    vscode.commands.registerCommand(COMMANDS.sendFile, addToChat(explorerSource)),
+    vscode.commands.registerCommand(COMMANDS.sendPreviewSelection, addToChat(markdownPreviewSource)),
   );
 }
 

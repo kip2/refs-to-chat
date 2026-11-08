@@ -63,6 +63,8 @@ interface MockDocument {
   fileName: string;
   /** ドキュメントの版（変わるたびに 1 つ進む） */
   version?: number;
+  lineCount?: number;
+  lineAt?(line: number): { text: string; range: Range };
 }
 
 /** 本物と同じく、selection は selections の先頭 */
@@ -138,6 +140,8 @@ export interface MockOptions {
   chatInEditorTab?: boolean;
   /** チャットのタブがあるエディタグループ（chatInEditorTab のとき、チャットを開くとこのグループが今のグループになる） */
   chatColumn?: number;
+  /** openTextDocument で開いたファイルの中身（パス → 文字列。なければ空） */
+  documentText?: Record<string, string>;
   /** 設定（例: `{ 'refsToChat.explorerClipboard': 'keep' }`） */
   settings?: Record<string, unknown>;
 }
@@ -183,6 +187,8 @@ export interface MockState {
   editors: Map<string, MockEditor>;
   /** 今のエディタグループ（1 か 2） */
   activeColumn: number;
+  /** グループごとの、前面にあるタブ（最初は、そのグループの最後のタブ） */
+  front: Map<number, MockTab | undefined>;
   /** コマンドの呼び出し（cmd:）とエディタの表示（show:）の順番 */
   log: string[];
 }
@@ -218,9 +224,23 @@ export function createVscodeMock(opts: MockOptions = {}) {
     editors: new Map(),
     activeColumn: 1,
     log: [],
+    front: new Map(),
   };
+  state.front.set(1, state.tabs[state.tabs.length - 1]);
+  state.front.set(2, state.otherTabs[state.otherTabs.length - 1]);
+  // グループごとに、前面に出た順（最後が今の前面）。最初は、タブの並び順に使ったものとする
+  const used = new Map<number, MockTab[]>([
+    [1, [...state.tabs]],
+    [2, [...state.otherTabs]],
+  ]);
+  const setFront = (column: number, tab: MockTab | undefined) => {
+    state.front.set(column, tab);
+    if (!tab) return;
+    used.set(column, [...(used.get(column) ?? []).filter((t) => t !== tab), tab]);
+  };
+  const FOCUS_GROUP = ['workbench.action.focusFirstEditorGroup', 'workbench.action.focusSecondEditorGroup'];
   const tabsOfColumn = (column: number) => (column === 2 ? state.otherTabs : state.tabs);
-  const groupOf = (column: number) => ({ viewColumn: column, tabs: tabsOfColumn(column) });
+  const groupOf = (column: number) => ({ viewColumn: column, tabs: tabsOfColumn(column), activeTab: state.front.get(column) });
   const hasTabIn = (tabs: MockTab[], u: MockUri) => tabs.some((t) => t.input.uri.toString() === u.toString());
 
   const FileType = { Unknown: 0, File: 1, Directory: 2, SymbolicLink: 64 };
@@ -236,6 +256,17 @@ export function createVscodeMock(opts: MockOptions = {}) {
     Selection,
     FileType,
     TabInputText,
+    // file:// の URI だけを読む（パスはそのまま fsPath にする）
+    Uri: {
+      parse(value: string, strict?: boolean): MockUri {
+        const m = /^file:\/\/(.*)$/.exec(value);
+        if (!m) {
+          if (strict) throw new Error(`[UriError]: Scheme is missing: ${value}`);
+          return uri(value);
+        }
+        return uri(decodeURIComponent(m[1]));
+      },
+    },
     workspace: {
       workspaceFolders: folders,
       onDidChangeTextDocument(listener: DocChangeListener) {
@@ -276,7 +307,8 @@ export function createVscodeMock(opts: MockOptions = {}) {
         state.opened.push(u.fsPath);
         if (is(opts.isBinary, u.fsPath)) throw new Error('File seems to be binary and cannot be opened as text');
         const p = opts.documentPath?.(u.fsPath) ?? u.fsPath;
-        return { uri: uri(p), fileName: p };
+        const lines = (opts.documentText?.[u.fsPath] ?? '').split('\n');
+        return { uri: uri(p), fileName: p, lineCount: lines.length, lineAt: (i: number) => ({ text: lines[i], range: new Range(i, 0, i, lines[i].length) }) };
       },
     },
     window: {
@@ -301,6 +333,10 @@ export function createVscodeMock(opts: MockOptions = {}) {
         state.log.push(`show:${key}@${column}`);
         const tabs = tabsOfColumn(column);
         if (!hasTabIn(tabs, doc.uri)) tabs.push({ input: new TabInputText(doc.uri) });
+        setFront(
+          column,
+          tabs.find((t) => t.input.uri.toString() === doc.uri.toString()),
+        );
         let editor = state.editors.get(key);
         if (!editor) {
           editor = new MockEditor(doc, opts.selections?.[key]);
@@ -325,6 +361,7 @@ export function createVscodeMock(opts: MockOptions = {}) {
           for (const tab of Array.isArray(tabs) ? tabs : [tabs]) {
             state.tabs = state.tabs.filter((t) => t !== tab);
             state.otherTabs = state.otherTabs.filter((t) => t !== tab);
+            for (const [column, front] of state.front) if (front === tab) state.front.set(column, undefined);
             state.closed.push(tab.input.uri.fsPath);
           }
           return true;
@@ -364,6 +401,13 @@ export function createVscodeMock(opts: MockOptions = {}) {
         }
         if (id === 'undo' && pastedDocument && !opts.undoDoesNothing) {
           pastedDocument.version = (pastedDocument.version ?? 1) + 1;
+        }
+        // エディタグループにフォーカスを移す（1 番目と 2 番目だけ）
+        if (FOCUS_GROUP.includes(id)) state.activeColumn = FOCUS_GROUP.indexOf(id) + 1;
+        // 今のグループで、直前に前面にあったタブを前面に出す
+        if (id === 'workbench.action.openPreviousRecentlyUsedEditorInGroup') {
+          const order = used.get(state.activeColumn) ?? [];
+          if (order.length >= 2) setFront(state.activeColumn, order[order.length - 2]);
         }
         // チャットをエディタのタブで開いていると、チャットに移ったときにアクティブなエディタがなくなる
         // 今のグループも、チャットのタブがあるグループに移る

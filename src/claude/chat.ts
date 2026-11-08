@@ -2,7 +2,7 @@
 // 中身には触れず、公開コマンドを呼ぶだけ
 
 import * as vscode from 'vscode';
-import { CLAUDE, FOCUS_WAIT_MS, LOG_PREFIX, PASTE_CHECK_MS, PASTE_COMMAND } from './constants';
+import { CLAUDE, FOCUS_WAIT_MS, LOG_PREFIX, PASTE_CHECK_MS, PASTE_COMMAND } from '../constants';
 
 export type InsertFailure = 'notInstalled' | 'failed';
 
