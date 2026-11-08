@@ -230,7 +230,7 @@ describe('E2E: 本物の VS Code と公式拡張', function () {
     });
   });
 
-  // GUIDE_MD の行: 3〜5 が段落、7〜8 がリスト、10〜13 がコードブロック（10 と 13 は ```）
+  // GUIDE_MD の行: 3〜5 が段落、7〜8 がリスト、10〜13 がコードブロック（10 と 13 は ```）、17〜24 が HTML の表
   // プレビューは開き方で webviewId が違うので、Ctrl+Shift+V と、横に開くものの両方で確かめる
   describe('Markdown のプレビューから追加する', function () {
     it('Ctrl+Shift+V のプレビューで、段落の 2 行目の途中だけを選ぶ → その行の参照が貼り付けで入る', async function () {
@@ -249,6 +249,16 @@ describe('E2E: 本物の VS Code と公式拡張', function () {
       await vs().rightClickPreview(['li', 1, 0], ['code', 0, 15]);
       await vs().clickMenuItem(MENU.selection);
       await expectInChat('@alpha/docs/guide.md#8-12');
+    });
+
+    // HTML ブロックは、行の情報（data-line）が先頭にしかないので、改行を数えて行を決める
+    it('HTML の表のセルを選ぶ → HTML ブロックの先頭ではなく、そのセルの行の参照が入る', async function () {
+      await vs().openFile(GUIDE_MD);
+      await vs().openMarkdownPreview('palette');
+      await vs().rightClickPreview(['td', 1, 0], ['td', 1, 4]);
+      await vs().clickMenuItem(MENU.selection);
+      const text = await expectInChat('@alpha/docs/guide.md#22');
+      assert.match(text, /@alpha\/docs\/guide\.md#22(?![-\d])/);
     });
 
     it('設定 refsToChat.markdownPreview を false にする → 選んでいても、メニューに出ない', async function () {

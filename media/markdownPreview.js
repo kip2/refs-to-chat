@@ -61,6 +61,32 @@
   }
 
   /**
+   * HTML ブロックの中の位置（node と offset）が、目印の要素（marker）から何行下か
+   * HTML ブロックの中身は書いたとおりに入るので、タグのあいだの改行は、元のファイルの改行のまま残っている
+   * 目印の要素のすぐあとには、プレビューが足した改行が 1 つあるので、それは数えない
+   * タグの中（属性のあいだ）の改行は残らないので、そのあとの行は、その数だけ上にずれる
+   */
+  function newlinesAfterMarker(marker, node, offset) {
+    const range = document.createRange();
+    range.setStartAfter(marker);
+    range.setEnd(node, offset);
+    let newlines = 0;
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+      if (text === node) {
+        newlines += countNewlines(text.data.slice(0, offset));
+        break;
+      }
+      const position = range.comparePoint(text, 0);
+      // 目印の要素より前の文字は飛ばし、その位置より後ろの文字に来たら終わり
+      if (position < 0) continue;
+      if (position > 0) break;
+      newlines += countNewlines(text.data);
+    }
+    return Math.max(0, newlines - 1);
+  }
+
+  /**
    * 選択の端（node と offset）を、ブロックの data-line と、ブロックの中でその前にある改行の数で表す
    * ブロックが見つからない（フロントマターなど）ときは、ファイルの 1 行目とする
    */
@@ -69,8 +95,8 @@
     if (!block) return { line: 0, newlines: 0, code: false };
     const line = Number(block.getAttribute(LINE_ATTR));
     const code = block.tagName === 'CODE';
-    // ブロックの外（HTML ブロックの本文）は、ブロックの先頭の行とする
-    if (!block.contains(node)) return { line, newlines: 0, code };
+    // ブロックの外（HTML ブロックの本文）は、目印の要素からの改行の数で行を決める
+    if (!block.contains(node)) return { line, newlines: newlinesAfterMarker(block, node, offset), code };
 
     const before = document.createRange();
     before.setStart(block, 0);

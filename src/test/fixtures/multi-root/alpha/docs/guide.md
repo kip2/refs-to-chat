@@ -13,3 +13,12 @@ const y = 2;
 ```
 
 Last paragraph.
+
+<table>
+  <tr>
+    <td>cell one</td>
+  </tr>
+  <tr>
+    <td>cell two</td>
+  </tr>
+</table>
